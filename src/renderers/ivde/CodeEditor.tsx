@@ -413,6 +413,18 @@ export const Editor = ({ currentTabId }: { currentTabId: string }) => {
     ];
 
     editor.setModel(model);
+
+    // Apply selection if this tab was opened with a specific line/column
+    const tabWithSelection = currentTab();
+    if (tabWithSelection && 'selection' in tabWithSelection && tabWithSelection.selection) {
+      const selection = tabWithSelection.selection as monaco.IRange;
+      // Use setTimeout to ensure the editor is fully ready
+      setTimeout(() => {
+        editor.setSelection(selection);
+        editor.revealLineInCenter(selection.startLineNumber);
+        editor.focus();
+      }, 0);
+    }
   };
 
   createEffect(() => {

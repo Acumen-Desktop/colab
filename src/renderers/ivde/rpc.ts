@@ -416,6 +416,14 @@ export type WorkspaceRPC = {
         };
         response: string[];
       };
+      cancelFileSearch: {
+        params: void;
+        response: boolean;
+      };
+      cancelFindAll: {
+        params: void;
+        response: boolean;
+      };
       getNode: {
         params: {
           path: string;

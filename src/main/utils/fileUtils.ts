@@ -15,7 +15,7 @@ import {
 } from "../../shared/types/types";
 import { isPathSafe } from "../../shared/utils/files";
 import { Utils } from "electrobun/bun";
-import { BUN_BINARY_PATH, COLAB_ENV_PATH, FD_BINARY_PATH } from "../consts/paths";
+import { BUN_BINARY_PATH, COLAB_ENV_PATH, FD_BINARY_PATH, RG_BINARY_PATH } from "../consts/paths";
 import { spawn } from "child_process";
 import path from "path";
 import type { Subprocess } from "bun";
@@ -234,20 +234,18 @@ export function findAllInFolder(
   query: string = "",
   onResult: (result: FindAllInFolderResult) => void
 ): Subprocess {
-  // console.log("searching1");
-
-  // todo:
-  // -i - ignore case in matches (should be toggle from UI)
-  // macos grep doesn't support column results
-  // replace with ripgrep or something else
+  // Use bundled ripgrep for fast content search
+  // ripgrep automatically respects .gitignore files
   const findAllProcess = Bun.spawn(
     [
-      "grep",
-      "-rIn",
-      // "--column",
-      "--exclude-dir=node_modules",
-      "--exclude-dir=.git",
-      "--exclude-dir=build",
+      RG_BINARY_PATH,
+      "--line-number",       // Show line numbers
+      "--column",            // Show column numbers
+      "--no-heading",        // Don't group by file
+      "--color=never",       // No ANSI color codes
+      "--case-sensitive",    // Case sensitive (can be toggled later)
+      "--max-count=500",     // Limit to 500 matches per file (prevents massive result sets)
+      // ripgrep respects .gitignore by default
       query,
       path,
     ],
@@ -258,16 +256,15 @@ export function findAllInFolder(
   );
 
   function processLine(line: string) {
+    // ripgrep format: path:line:column:match
     const parts = line.split(":");
-    if (parts.length >= 3) {
+    if (parts.length >= 4) {
       const path = parts[0];
-      const line = parseInt(parts[1], 10);
-      const match = parts.slice(2).join(":"); // Handles matches containing ":"
+      const lineNum = parseInt(parts[1], 10);
+      const column = parseInt(parts[2], 10);
+      const match = parts.slice(3).join(":"); // Handles matches containing ":"
 
-      onResult({ path, line, column: 0, match });
-      // console.log({ file, line: lineNumber, match });
-    } else {
-      // console.log("Invalid line format:", line);
+      onResult({ path, line: lineNum, column, match });
     }
   }
 

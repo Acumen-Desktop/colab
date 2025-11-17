@@ -1195,11 +1195,15 @@ export const openFileAt = (path: string, line: number, column: number) => {
   const newTabId = openNewTab({
     type: "file",
     path,
-  });
+    selection, // Pass selection to be applied when editor loads
+  } as any);
 
+  // Try to apply selection if editor is ready, but it will be applied
+  // by the CodeEditor component when it mounts if editor isn't ready yet
   const editor = getEditorForTab(newTabId)?.editor;
-  editor?.focus();
-  // editor?.setPosition(selection);
-  editor?.setSelection(selection);
-  editor?.revealLineInCenter(selection.startLineNumber);
+  if (editor) {
+    editor.focus();
+    editor.setSelection(selection);
+    editor.revealLineInCenter(selection.startLineNumber);
+  }
 };

@@ -1069,7 +1069,6 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
           });
         },
         findAllInWorkspace: ({ query }) => {
-          console.log("query: ", query);
           const workspace = db
             .collection("workspaces")
             .queryById(workspaceId).data;
@@ -1078,39 +1077,94 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
             return [];
           }
 
-          // Add a timeout for fast typers to finish typing
-          setTimeout(() => {
-            findAllProcesses.forEach((process) => {
-              console.log("killing process");
-              process?.kill();
-            });
+          // Kill any existing find all processes immediately
+          findAllProcesses.forEach((process) => {
+            process?.kill();
+          });
+          findAllProcesses = [];
 
-            if (!query) {
-              return [];
-            }
+          if (!query) {
+            return [];
+          }
 
-            findAllProcesses = workspace.projectIds.map((projectId) => {
-              const project = db
-                .collection("projects")
-                .queryById(projectId).data;
+          // Batch results to reduce RPC message flooding
+          // This gives cancellations a better chance to interrupt
+          const resultBatches: Map<string, any[]> = new Map();
+          let batchTimeout: Timer | null = null;
+          let totalResultCount = 0;
+          const MAX_TOTAL_RESULTS = 1000; // Stop after collecting 1000 results total
 
-              if (!project || !project.path) {
-                return null;
-              }
-
-              console.log("searching in project", project.path, query);
-
-              return findAllInFolder(project.path, query, (result) => {
+          const flushBatches = () => {
+            resultBatches.forEach((results, projectId) => {
+              if (results.length > 0) {
                 mainWindow.webview.rpc?.send("findAllInFolderResult", {
                   query,
-                  projectId: projectId,
-                  results: [result],
+                  projectId,
+                  results,
                 });
-              });
+              }
             });
-          }, 400);
+            resultBatches.clear();
+          };
 
-          //   console.log("query", query, workspaceId, results);
+          // Start new searches for each project
+          findAllProcesses = workspace.projectIds.map((projectId) => {
+            const project = db
+              .collection("projects")
+              .queryById(projectId).data;
+
+            if (!project || !project.path) {
+              return null;
+            }
+
+            // Initialize batch for this project
+            resultBatches.set(projectId, []);
+
+            return findAllInFolder(project.path, query, (result) => {
+              // Stop accepting results if we've hit the limit
+              if (totalResultCount >= MAX_TOTAL_RESULTS) {
+                // Kill all processes once we have enough results
+                findAllProcesses.forEach((process) => {
+                  process?.kill();
+                });
+                return;
+              }
+
+              const batch = resultBatches.get(projectId);
+              if (batch) {
+                batch.push(result);
+                totalResultCount++;
+
+                // Send first result immediately for instant feedback
+                if (batch.length === 1 && !batchTimeout) {
+                  mainWindow.webview.rpc?.send("findAllInFolderResult", {
+                    query,
+                    projectId,
+                    results: [...batch],
+                  });
+                  batch.length = 0; // Clear batch
+                  return;
+                }
+
+                // Send batches every 100ms or when batch reaches 50 results
+                if (batch.length >= 50) {
+                  mainWindow.webview.rpc?.send("findAllInFolderResult", {
+                    query,
+                    projectId,
+                    results: [...batch],
+                  });
+                  batch.length = 0; // Clear batch
+                } else {
+                  // Throttle sends to every 100ms
+                  if (batchTimeout) {
+                    clearTimeout(batchTimeout);
+                  }
+                  batchTimeout = setTimeout(flushBatches, 100);
+                }
+              }
+            });
+          });
+
           return [];
         },
         findFilesInWorkspace: ({ query }) => {
@@ -1158,6 +1212,13 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
             process?.kill();
           });
           findFilesProcesses = [];
+          return true;
+        },
+        cancelFindAll: () => {
+          findAllProcesses.forEach((process) => {
+            process?.kill();
+          });
+          findAllProcesses = [];
           return true;
         },
         getNode: ({ path }) => {

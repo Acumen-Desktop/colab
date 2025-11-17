@@ -119,6 +119,9 @@ const defaultWebFaviconUrl = () => `views://assets/file-icons/bookmark.svg`;
 
 // Removed DEFAULT_HOME_URL - no longer needed without new tab button
 
+// Global ref for Find All input (for keyboard shortcut)
+let globalFindAllInput: HTMLInputElement | undefined;
+
 // We prevent the browser window's webcontents
 // from closing. This prevents cmd+w from shutting it down
 // and cmd+r from refreshing it.
@@ -160,7 +163,22 @@ document.addEventListener(
     // todo (yoav): normalize the pattern here so each shortcut is its own function
     // that gets registered
 
-    if (e.key === "w" && e.metaKey === true && e.shiftKey === true) {
+    if (e.key === "f" && e.metaKey === true && e.shiftKey === true) {
+      // cmd+shift+f - focus Find All input
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (globalFindAllInput) {
+        // Show sidebar if hidden
+        if (!state.ui.showSidebar) {
+          setState("ui", "showSidebar", true);
+        }
+        // Focus the input after a brief delay to ensure sidebar is visible
+        setTimeout(() => {
+          globalFindAllInput?.focus();
+          globalFindAllInput?.select();
+        }, 100);
+      }
+    } else if (e.key === "w" && e.metaKey === true && e.shiftKey === true) {
       electrobun.rpc?.send.closeWindow();
     } else if (e.key === "w" && e.metaKey === true) {
       e.preventDefault();
@@ -3699,30 +3717,40 @@ const Sidebar = () => {
   const width = () => (state.ui.showSidebar ? "250px" : "0px");
   console.log("rendering Sidebar");
 
+  let searchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+
   const onFindAllChange = (e: InputEvent) => {
     const value = e.target?.value;
 
+    // Clear results and cancel ongoing searches immediately
     if (value !== state.findAllInFolder.query) {
       setState(
         produce((_state: AppState) => {
           _state.findAllInFolder = { query: value, results: {} };
         })
       );
-      //"findAllInFolder", { query: value, results: {} });
+
+      // Cancel any ongoing find all searches
+      electrobun.rpc?.request.cancelFindAll();
     }
 
-    console.log("EMPTY!!!!!!!!");
-    electrobun.rpc?.request
-      .findAllInWorkspace({ query: value })
-      .then((results) => {
-        console.log("find all results: ", results);
-      });
+    // Clear any pending debounced search
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer);
+    }
 
-    // Switching to the fileTree results in a ton of sync rpc calls which can
-    // totally block bun and cause tons of issues around the flood of async requests
-    // from findAll. so we give it time. eventually we should remove all the sync rpc
+    // Toggle file tree filter based on whether there's a query
     if (state.ui.filterFileTreeByFindAll !== Boolean(value)) {
       setState("ui", "filterFileTreeByFindAll", Boolean(value));
+    }
+
+    // Debounce the actual search - wait for user to stop typing
+    if (value) {
+      searchDebounceTimer = setTimeout(() => {
+        electrobun.rpc?.request.findAllInWorkspace({ query: value }).catch((error) => {
+          console.error("Find all search error:", error);
+        });
+      }, 200); // Wait 300ms after last keystroke
     }
   };
 
@@ -3733,8 +3761,6 @@ const Sidebar = () => {
       !state.ui.filterFileTreeByFindAll
     );
   };
-
-  console.log("A: result", state.findAllInFolder.results);
 
   return (
     <div
@@ -3765,18 +3791,19 @@ const Sidebar = () => {
         }}
       >
         <input
+          ref={(r) => (globalFindAllInput = r)}
           style={`
             background: #3c3c3c;
             border: 1px solid #464647;
             border-radius: 3px;
-            padding: 6px 30px 6px 8px; 
-            color: #cccccc;   
+            padding: 6px 30px 6px 8px;
+            color: #cccccc;
             flex-grow: 1;
             margin-right: -26px;
             font-size: 13px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;     
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             box-shadow: none;
-            outline: none;       
+            outline: none;
           `}
           placeholder="Find All"
           onInput={onFindAllChange}

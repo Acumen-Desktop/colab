@@ -612,19 +612,24 @@ export const FileTree = ({
                 <div
                   style={`cursor: pointer;
                     margin-left: 20px;
-                    padding: 5px 10px;
-                    font-weight: bold;
-                    background: #f0f0f0;
-                    color: #cccccc;
-                    border: 1px solid #b1b1b1;
-                    border-radius: 3px;`}
+                    padding: 6px 12px;
+                    font-size: 12px;
+                    background: #3c3c3c;
+                    color: #ccc;
+                    border: 1px solid #555;
+                    border-radius: 4px;
+                    transition: background 0.15s ease;
+                    user-select: none;
+                    -webkit-user-select: none;`}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#4a4a4a'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = '#3c3c3c'}
                   onClick={() => {
                     setNumResultsToShow(
                       numResultsToShow() + numResultsHidden()
                     );
                   }}
                 >
-                  {`Show ${numResultsHidden()} more matches`}
+                  {`Show ${numResultsHidden()} more match${numResultsHidden() === 1 ? '' : 'es'}`}
                 </div>
               </TreeLI>
             </TreeUL>
@@ -1862,10 +1867,6 @@ const FindAllResultProjectTree = ({ projectId, projectNode }) => {
     return [];
   };
 
-  console.log(projectNode);
-
-  // console.log("projectResultPaths", projectResultPaths);
-
   return (
     <TreeLI node={projectNode}>
       <NodeName
@@ -1900,17 +1901,22 @@ const FindAllResultProjectTree = ({ projectId, projectNode }) => {
           <div
             style={`cursor: pointer;
               margin-left: 20px;
-              padding: 5px 10px;
-              font-weight: bold;
-              background: #f0f0f0;
-              color: #cccccc;
-              border: 1px solid #b1b1b1;
-              border-radius: 3px;`}
+              padding: 6px 12px;
+              font-size: 12px;
+              background: #3c3c3c;
+              color: #ccc;
+              border: 1px solid #555;
+              border-radius: 4px;
+              transition: background 0.15s ease;
+              user-select: none;
+              -webkit-user-select: none;`}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#4a4a4a'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#3c3c3c'}
             onClick={() => {
               setNumResultsToShow(numResultsToShow() + numResultsToIncremenet);
             }}
           >
-            {`Show 10 more files of ${numResultsHidden()}`}
+            {`Show ${numResultsToIncremenet} more file${numResultsToIncremenet === 1 ? '' : 's'} (${numResultsHidden()} hidden)`}
           </div>
         )}
       </Show>
