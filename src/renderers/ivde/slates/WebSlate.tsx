@@ -717,41 +717,26 @@ console.log('Preload script loaded for:', window.location.href);
           // YYYY - DidNavigateEvent
           // @ts-ignore
           webviewRef.on("did-navigate", async (e: DidNavigateEvent) => {
-            console.log("did-navigate event:", e.detail, typeof e.detail);
+            console.log("did-navigate event:", e.detail);
 
-            // Validate that e.detail is a valid string URL before using it
-            if (!e.detail || typeof e.detail !== 'string' || e.detail.length < 1) {
-              console.warn("Invalid did-navigate event detail, ignoring:", e.detail);
-              return;
-            }
-
-            // Additional validation - try to construct URL to ensure it's valid
-            let validUrl: string;
-            try {
-              validUrl = new URL(e.detail).href;
-            } catch (err) {
-              console.warn("Invalid URL in did-navigate event, ignoring:", e.detail);
-              return;
-            }
-
-            // Update URL immediately with validated URL
+            // Update URL immediately
             setState(
               produce((_state: AppState) => {
                 const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
-                _tab.url = validUrl;
+                _tab.url = e.detail;
                 // For now, extract hostname as title until we can get the real title
                 try {
-                  const url = new URL(validUrl);
+                  const url = new URL(e.detail);
                   _tab.title = url.hostname;
                 } catch (err) {
-                  _tab.title = validUrl;
+                  _tab.title = e.detail;
                 }
               })
             );
 
             // Fetch favicon for the new URL
             electrobun.rpc?.request
-              .getFaviconForUrl({ url: validUrl })
+              .getFaviconForUrl({ url: e.detail })
               .then((favicon) => {
                 if (favicon) {
                   // Update the tab's icon in the slate config if this is a real browser profile node
