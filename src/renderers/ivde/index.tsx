@@ -3450,6 +3450,30 @@ const NodeSettings = () => {
                           </Show>
                         </div>
                       </SettingsPaneField>
+                      <SettingsPaneField label="Browser Engine">
+                        <select
+                          name="renderer"
+                          value={createMemo(() => {
+                            const slate = getSlateForNode(previewNode());
+                            if (slate?.type === "web" && slate.config && "renderer" in slate.config) {
+                              return slate.config.renderer || "cef";
+                            }
+                            return "cef";
+                          })()}
+                          onInput={(e: any) => {
+                            const renderer = e.currentTarget.value as "cef" | "system";
+                            setPreviewNodeSlateConfig({ renderer });
+                          }}
+                          style="background: #2b2b2b;border-radius: #2b2b2b;border: 1px solid #212121;color: #d9d9d9;outline: none;cursor: pointer;display: block;font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;font-size: 12px;padding-top: 8px;padding-right: 9px;padding-bottom: 8px;padding-left: 9px;line-height: 14px;width: 100%;box-sizing: border-box;"
+                        >
+                          <option value="cef">Chromium (CEF)</option>
+                          <option value="system">WebKit (System)</option>
+                        </select>
+                        <div style="font-size: 11px; color: #888; margin-top: 4px; background: #333; padding: 8px; border-radius: 4px;">
+                          <div style="margin-bottom: 4px;"><strong>Chromium (CEF):</strong> Full Chrome browser engine. Best compatibility with modern web apps.</div>
+                          <div><strong>WebKit (System):</strong> Native macOS browser engine. Lighter weight, better for simple sites.</div>
+                        </div>
+                      </SettingsPaneField>
                       <Show when={state.settingsPane.type === "edit-node"}>
                         <SettingsPaneField label="Preload Script">
                           <button

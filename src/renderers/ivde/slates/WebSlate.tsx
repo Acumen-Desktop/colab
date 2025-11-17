@@ -347,7 +347,9 @@ console.log('Preload script loaded for:', window.location.href);
         icon: "views://assets/file-icons/bookmark.svg",
         type: "web",
         url: currentUrl,
-        config: {},
+        config: {
+          renderer: "cef" as const, // Default to CEF for new browser profiles
+        },
       };
       
       const slateConfigPath = join(browserProfilePath, ".colab.json");
@@ -473,6 +475,16 @@ console.log('Preload script loaded for:', window.location.href);
     return colabPreloadScript + ";\n " + preloadContent();
   };
 
+  // Get the renderer setting from the slate config
+  const renderer = () => {
+    const slate = getSlateForNode(node);
+    if (slate?.type === "web" && slate.config?.renderer) {
+      return slate.config.renderer;
+    }
+    // Default to CEF for better compatibility
+    return "cef";
+  };
+
   return (
     <div style="display: flex; flex-direction: column; height: 100%">
       <div style="display: flex; box-sizing: border-box; gap: 5px; padding: 10px; min-height: 40px;height: 40px; width: 100%;overflow-x:hidden;">
@@ -564,7 +576,7 @@ console.log('Preload script loaded for:', window.location.href);
         {/* @ts-ignore */}
         <electrobun-webview
           data-type="webslate"
-          // renderer="cef"
+          renderer={renderer()}
           style={{
             width: `calc(100% - 4px)`,
             height: "calc(100% - 4px)",

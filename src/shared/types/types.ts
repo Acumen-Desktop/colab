@@ -70,7 +70,9 @@ export type SlateType =
       type: "web";
       url: string;
       icon: string;
-      config: any;
+      config: {
+        renderer?: "cef" | "system";
+      };
     }
   | {
       v: 1;
