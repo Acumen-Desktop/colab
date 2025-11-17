@@ -10,6 +10,7 @@ import {
   getWindow,
   focusTabWithId,
   openFileAt,
+  updateSyncedState,
 } from "../store";
 import { For, type JSX, Show, createEffect, createSignal, createMemo } from "solid-js";
 
@@ -22,12 +23,24 @@ export const TopBar = () => {
   };
 
   const onClickToggleSidebar = () => {
-    const showSidebar = !state.ui.showSidebar;
+    const currentWindow = getWindow();
+    if (!currentWindow) return;
+
+    const showSidebar = !currentWindow.ui.showSidebar;
     // isResizingPane will cause active webviews to go into mirroring mode
     setState("isResizingPane", true);
     // give it a second to start before toggling the ui so the animation is smoother
     setTimeout(() => {
-      setState("ui", "showSidebar", showSidebar);
+      // Update the workspace window state and persist to database
+      setState(
+        "workspace",
+        "windows",
+        (w) => w.id === currentWindow.id,
+        "ui",
+        "showSidebar",
+        showSidebar
+      );
+      updateSyncedState();
     }, 200);
     // then after the animation is complete turn off mirroring mode
     setTimeout(() => {
@@ -70,7 +83,7 @@ export const TopBar = () => {
           width="16px"
           height="16px"
           src={`views://assets/file-icons/sidebar-left${
-            state.ui.showSidebar ? "-filled" : ""
+            getWindow()?.ui.showSidebar ? "-filled" : ""
           }.svg`}
         />
       </div>      
@@ -663,7 +676,7 @@ const Update = () => {
       return "Download failed, retrying shortly";
     }
 
-    return "Downloading update…";
+    return "Fetching update…";
   };
 
   const onClick = () => {

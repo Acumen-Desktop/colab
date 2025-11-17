@@ -169,8 +169,17 @@ document.addEventListener(
       e.stopImmediatePropagation();
       if (globalFindAllInput) {
         // Show sidebar if hidden
-        if (!state.ui.showSidebar) {
-          setState("ui", "showSidebar", true);
+        const currentWindow = getWindow();
+        if (currentWindow && !currentWindow.ui.showSidebar) {
+          setState(
+            "workspace",
+            "windows",
+            (w) => w.id === currentWindow.id,
+            "ui",
+            "showSidebar",
+            true
+          );
+          updateSyncedState();
         }
         // Focus the input after a brief delay to ensure sidebar is visible
         setTimeout(() => {
@@ -3738,10 +3747,59 @@ const NodeSettings = () => {
 };
 
 const Sidebar = () => {
-  const width = () => (state.ui.showSidebar ? "250px" : "0px");
+  const [isDraggingResize, setIsDraggingResize] = createSignal(false);
+  const [isHoveredResize, setIsHoveredResize] = createSignal(false);
+
+  const width = () => {
+    const currentWindow = getWindow();
+    if (!currentWindow?.ui.showSidebar) return "0px";
+    const sidebarWidth = currentWindow.ui.sidebarWidth || 250;
+    return `${sidebarWidth}px`;
+  };
   console.log("rendering Sidebar");
 
   let searchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const onResizeMouseDown = (e: DomEventWithTarget<MouseEvent>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    setIsDraggingResize(true);
+    setState("isResizingPane", true);
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const currentWindow = getWindow();
+      if (!currentWindow) return;
+
+      const currentWidth = currentWindow.ui.sidebarWidth || 250;
+      const newWidth = Math.max(250, Math.min(600, currentWidth + e.movementX));
+
+      setState(
+        "workspace",
+        "windows",
+        (w) => w.id === currentWindow.id,
+        "ui",
+        "sidebarWidth",
+        newWidth
+      );
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingResize(false);
+      setState("isResizingPane", false);
+
+      // Persist the width to database when done resizing
+      const currentWindow = getWindow();
+      if (currentWindow) {
+        updateSyncedState();
+      }
+
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
 
   const onFindAllChange = (e: InputEvent) => {
     const value = e.target?.value;
@@ -3791,21 +3849,29 @@ const Sidebar = () => {
       style={{
         width: width(),
         height: "100%",
-        "background-color": "#e7e2df",
-        "border-right": "1px solid #333",
-        overflow: "scroll",
-        "box-sizing": "border-box",
         flex: "none",
-        "white-space": "nowrap",
-        transition: "150ms width",
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        if (state.dragState?.type === "node") {
-          setState("dragState", "targetPaneId", null);
-        }
+        position: "relative",
+        display: "flex",
+        "flex-direction": "row",
+        transition: isDraggingResize() ? "none" : "150ms width",
       }}
     >
+      <div
+        style={{
+          flex: "1",
+          height: "100%",
+          "background-color": "#e7e2df",
+          overflow: "scroll",
+          "box-sizing": "border-box",
+          "white-space": "nowrap",
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (state.dragState?.type === "node") {
+            setState("dragState", "targetPaneId", null);
+          }
+        }}
+      >
       <div
         style={{
           display: "flex",
@@ -3873,6 +3939,28 @@ const Sidebar = () => {
           </>
         )}
       </div>
+      </div>
+
+      {/* Resize handle */}
+      <Show when={getWindow()?.ui.showSidebar}>
+        <div
+          style={{
+            cursor: "ew-resize",
+            width: "4px",
+            height: "100%",
+            transition: "background 150ms",
+            background: isHoveredResize() ? "#105460" : "#333",
+            position: "absolute",
+            right: "0",
+            top: "0",
+            "z-index": 20,
+            "-webkit-user-select": "none",
+          }}
+          onMouseDown={onResizeMouseDown}
+          onMouseEnter={() => setIsHoveredResize(true)}
+          onMouseLeave={() => setIsHoveredResize(false)}
+        />
+      </Show>
     </div>
   );
 };
