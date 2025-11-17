@@ -1114,7 +1114,6 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
           return [];
         },
         findFilesInWorkspace: ({ query }) => {
-          console.log("query: ", query);
           const workspace = db
             .collection("workspaces")
             .queryById(workspaceId).data;
@@ -1126,7 +1125,6 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
           // Add a timeout for fast typers to finish typing
           setTimeout(() => {
             findFilesProcesses.forEach((process) => {
-              console.log("killing process");
               process?.kill();
             });
 
@@ -1143,8 +1141,6 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
                 return null;
               }
 
-              console.log("searching in project", project.path, query);
-
               return findFilesInFolder(project.path, query, (result) => {
                 mainWindow.webview.rpc?.send("findFilesInWorkspaceResult", {
                   query,
@@ -1155,8 +1151,14 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
             });
           }, 400);
 
-          //   console.log("query", query, workspaceId, results);
           return [];
+        },
+        cancelFileSearch: () => {
+          findFilesProcesses.forEach((process) => {
+            process?.kill();
+          });
+          findFilesProcesses = [];
+          return true;
         },
         getNode: ({ path }) => {
           if (!existsSync(path)) {

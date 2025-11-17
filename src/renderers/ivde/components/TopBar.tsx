@@ -11,9 +11,16 @@ import {
   focusTabWithId,
   openFileAt,
 } from "../store";
-import { For, type JSX, Show, createEffect, createSignal } from "solid-js";
+import { For, type JSX, Show, createEffect, createSignal, createMemo } from "solid-js";
 
 export const TopBar = () => {
+  const setCommandPaletteOpen = (value: boolean) => {
+    setState("ui", "showCommandPalette", value);
+    if (!value) {
+      electrobun.rpc?.request.cancelFileSearch();
+    }
+  };
+
   const onClickToggleSidebar = () => {
     const showSidebar = !state.ui.showSidebar;
     // isResizingPane will cause active webviews to go into mirroring mode
@@ -26,39 +33,6 @@ export const TopBar = () => {
     setTimeout(() => {
       setState("isResizingPane", false);
     }, 800);
-  };
-
-  // const onClickToggleTabs = () => {};
-
-  const globalSettingsClick = () => {
-    setState("settingsPane", {
-      type:
-        state.settingsPane.type === "global-settings" ? "" : "global-settings",
-      data: {},
-    });
-  };
-
-  const workspaceSettingsClick = () => {
-    setState("settingsPane", {
-      type:
-        state.settingsPane.type === "workspace-settings"
-          ? ""
-          : "workspace-settings",
-      data: {},
-    });
-  };
-
-
-  const openNewWindow = () => {
-    electrobun.rpc?.send.createWindow();
-  };
-
-  const openNewWorkspace = () => {
-    electrobun.rpc?.send.createWorkspace();
-  };
-
-  const openXtermDemo = () => {
-    electrobun.rpc?.send.createXtermDemoWindow();
   };
 
   // todo (yoav): make this a util that follows the currentTabPath
@@ -101,43 +75,60 @@ export const TopBar = () => {
         />
       </div>
 
+      {/* Workspace name button - opens command palette */}
+      <div
+        style={{
+          "margin-left": "12px",
+          padding: "4px 12px",
+          "margin-top": "7px",
+          height: "24px",
+          background: "#333",
+          color: "#ddd",
+          "border-radius": "4px",
+          "font-size": "13px",
+          "line-height": "24px",
+          cursor: "pointer",
+          "-webkit-user-select": "none",
+          border: "1px solid #444",
+          display: "flex",
+          "align-items": "center",
+        }}
+        onClick={() => setCommandPaletteOpen(true)}
+      >
+        {state.workspace?.name || "Workspace"}
+      </div>
+
       <div
         class="electrobun-webkit-app-region-drag"
         style="flex-grow:1; height: 100%; cursor: move; "
       ></div>
 
-      {/* todo (yoav): I don't love this api but I can clean it up later */}
-
-      <WorkspaceMenu>
-        <li onClick={openNewWindow}>New Window</li>
-        <li
-          onClick={() => {
-            electrobun.rpc?.send.hideWorkspace();
-          }}
-        >
-          Hide Workspace
-        </li>
-        <div style="width: 100%; margin: 5px 0; border-bottom: 1px inset black"></div>
-        <li onClick={workspaceSettingsClick}>Workspace Settings</li>
-        <li onClick={globalSettingsClick}>Colab Settings</li>
-        <div style="width: 100%; margin: 5px 0; border-bottom: 1px inset black"></div>
-        <li onClick={openNewWorkspace}>New Workspace</li>
-        <div style="width: 100%; margin: 5px 0; border-bottom: 1px inset black"></div>
-        <li onClick={openXtermDemo}>XTerm.js Demo Window</li>
-        <div style="width: 100%; margin: 5px 0; border-bottom: 1px inset black"></div>
-      </WorkspaceMenu>
       <Update />
-      <AppMenu />
-      <CommandPalette />
+
+      {/* Colab button */}
+      <div
+        style="font-size: 13px;margin: 8px 0px; margin-right: -2px; cursor: pointer;"
+        title="This is a beta version of co(lab)"
+        onClick={() => openNewTabForNode("__COLAB_INTERNAL__/web", false, { url: "https://github.com/blackboardsh/colab" })}
+      >
+        <img
+          style={{
+            height: "25px",
+            background: "#fefefe",
+            "border-radius": "4px",
+          }}
+          src="views://assets/colab-logo.png"
+        />
+      </div>
+
+      <CommandPalette setOpen={setCommandPaletteOpen} />
     </div>
   );
 };
 
-const CommandPalette = () => {
-  // const [open, setOpen] = createSignal(false);
-
-  const setOpen = (value = !state.ui.showCommandPalette) => {
-    setState("ui", "showCommandPalette", value);
+const CommandPalette = ({ setOpen }: { setOpen: (value: boolean) => void }) => {
+  const toggleOpen = (value = !state.ui.showCommandPalette) => {
+    setOpen(value);
   };
 
   const open = () => {
@@ -164,27 +155,90 @@ const CommandPalette = () => {
     { name: string; description: string; project: string }[]
   >([]);
 
+  const [workspaceCommands, setWorkspaceCommands] = createSignal<
+    { name: string; description: string; action: () => void }[]
+  >([]);
+
+  const [colabCommands, setColabCommands] = createSignal<
+    { name: string; description: string; action: () => void }[]
+  >([]);
+
+  const [selectedIndex, setSelectedIndex] = createSignal(0);
+
+  // Flatten all items into a single array for navigation - needs to be a memo for reactivity
+  const getAllItems = createMemo(() => {
+    const items: any[] = [];
+
+    openTabs().forEach((tab) => {
+      items.push({ type: 'tab', ...tab });
+    });
+
+    workspaceCommands().forEach((cmd) => {
+      items.push({ type: 'workspace', ...cmd });
+    });
+
+    colabCommands().forEach((cmd) => {
+      items.push({ type: 'colab', ...cmd });
+    });
+
+    const files = fileMatches();
+    files.forEach((file) => {
+      items.push({ type: 'file', ...file });
+    });
+
+    return items;
+  });
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    const allItems = getAllItems();
+    const totalItems = allItems.length;
+
+    if (totalItems === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIndex((selectedIndex() + 1) % totalItems);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex((selectedIndex() - 1 + totalItems) % totalItems);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const selectedItem = allItems[selectedIndex()];
+      if (selectedItem) {
+        if (selectedItem.type === 'tab') {
+          focusTabWithId(selectedItem.tabId);
+        } else if (selectedItem.type === 'workspace' || selectedItem.type === 'colab') {
+          selectedItem.action();
+        } else if (selectedItem.type === 'file') {
+          openFileAt(selectedItem.path, 0, 0);
+        }
+        setOpen(false);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      toggleOpen(false);
+    }
+  };
+
   const onCommandPaletteInput = (e: InputEvent) => {
     const value = e.target?.value;
 
     if (value !== state.commandPalette.query) {
       setState(
         produce((_state: AppState) => {
-          _state.commandPalette = { query: value, results: [] };
+          _state.commandPalette = { query: value, results: {} };
         })
       );
     }
 
-    electrobun.rpc?.request
-      .findFilesInWorkspace({ query: value })
-      .then((results) => {
-        console.log("find all results: ", results);
-      });
+    // Trigger file search - results will stream in via findFilesInWorkspaceResult handler
+    electrobun.rpc?.request.findFilesInWorkspace({ query: value });
   };
 
   createEffect((lastValue) => {
     if (open()) {
       resetOpenTabs();
+      filterCommands();
       if (!lastValue) {
         setState("commandPalette", "query", "");
       }
@@ -206,7 +260,6 @@ const CommandPalette = () => {
           const name = basename(tab.path);
           const folder = dirname(tab.path).replace(project?.path || "", "");
           const projectName = project?.name || basename(project?.path);
-          console.log("project name::::", project);
           if (name.match(queryRegex)) {
             acc.push({
               name: name,
@@ -235,28 +288,125 @@ const CommandPalette = () => {
     setOpenTabs(tabs);
   };
 
+  const openWebTab = (url: string) => {
+    openNewTabForNode("__COLAB_INTERNAL__/web", false, { url });
+  };
+
+  const globalSettingsClick = () => {
+    setState("settingsPane", {
+      type:
+        state.settingsPane.type === "global-settings" ? "" : "global-settings",
+      data: {},
+    });
+  };
+
+  const workspaceSettingsClick = () => {
+    setState("settingsPane", {
+      type:
+        state.settingsPane.type === "workspace-settings"
+          ? ""
+          : "workspace-settings",
+      data: {},
+    });
+  };
+
+  const filterCommands = () => {
+    const query = state.commandPalette.query;
+    const queryRegex = new RegExp(query.split("").join(".*"), "i");
+
+    // Define all workspace commands
+    const allWorkspaceCommands = [
+      { name: "New Window", description: "Open a new window", action: () => electrobun.rpc?.send.createWindow() },
+      { name: "Hide Workspace", description: "Hide the current workspace", action: () => electrobun.rpc?.send.hideWorkspace() },
+      { name: "Workspace Settings", description: "Configure workspace settings", action: workspaceSettingsClick },
+      { name: "Colab Settings", description: "Configure global Colab settings", action: globalSettingsClick },
+      { name: "New Workspace", description: "Create a new workspace", action: () => electrobun.rpc?.send.createWorkspace() },
+    ];
+
+    // Define all colab menu commands
+    const allColabCommands = [
+      { name: "Submit an issue", description: "Report a Bug / Request a Feature", action: () => openWebTab("https://github.com/blackboardsh/colab") },
+      { name: "Changelog", description: "View Colab changelog", action: () => openWebTab("https://github.com/blackboardsh/colab/tags") },
+      { name: "Blackboard Blog", description: "Updates from the Blackboard Labs", action: () => openWebTab("https://blackboard.sh/blog/") },
+      { name: "Join co(lab) Discord", description: "Join our Discord community", action: () => openWebTab("https://discord.gg/ueKE4tjaCE") },
+      { name: "Yoav", description: "Things Yoav says", action: () => openWebTab("https://bsky.app/profile/yoav.codes") },
+    ];
+
+    // Filter workspace commands
+    const filteredWorkspace = allWorkspaceCommands.filter((cmd) => {
+      const combined = `${cmd.name} ${cmd.description}`;
+      return combined.match(queryRegex);
+    });
+
+    // Filter colab commands
+    const filteredColab = allColabCommands.filter((cmd) => {
+      const combined = `${cmd.name} ${cmd.description}`;
+      return combined.match(queryRegex);
+    });
+
+    setWorkspaceCommands(filteredWorkspace);
+    setColabCommands(filteredColab);
+  };
+
   // resetOpenTabs();
 
   createEffect(() => {
-    const matches = [];
-    if (state.commandPalette.query) {
-      Object.entries(state.commandPalette.results).forEach(([key, value]) => {
+    const matches: any[] = [];
+    const query = state.commandPalette.query;
+    const results = state.commandPalette.results;
+
+    if (query) {
+      // Collect matches per project with scoring, limit to top 5 per project
+      Object.entries(results).forEach(([key, value]) => {
         const project = state.projects[key];
+        const projectMatches: any[] = [];
+
         value.forEach((path) => {
           const name = basename(path);
-          const folder = dirname(path).replace(project.path, "");
-          matches.push({
+
+          // Get path from project folder (including project folder name)
+          const projectFolderName = basename(project.path);
+          const pathFromProject = path.replace(dirname(project.path) + "/", "");
+
+          // Simple scoring: prefer shorter paths and exact substring matches
+          const lowerQuery = query.toLowerCase();
+          let score = 0;
+
+          // Exact filename match gets highest score
+          if (name.toLowerCase() === lowerQuery) score += 1000;
+          // Filename starts with query
+          else if (name.toLowerCase().startsWith(lowerQuery)) score += 500;
+          // Filename contains query
+          else if (name.toLowerCase().includes(lowerQuery)) score += 250;
+
+          // Shorter paths rank higher
+          score -= path.length / 100;
+
+          projectMatches.push({
             name,
-            description: `${
-              project.name || basename(project.path || "")
-            } ${folder}`,
+            description: pathFromProject,
             path,
+            score,
           });
         });
+
+        // Sort by score and take top 5 from this project
+        projectMatches.sort((a, b) => b.score - a.score);
+        matches.push(...projectMatches.slice(0, 5));
       });
+
+      // Sort all matches by score for final display
+      matches.sort((a, b) => b.score - a.score);
     }
 
     setFileMatches(matches);
+
+    // Update filtered commands when query changes
+    resetOpenTabs();
+    filterCommands();
+
+    // Reset selected index when items change
+    setSelectedIndex(0);
   });
 
   let input: HTMLInputElement;
@@ -337,78 +487,77 @@ const CommandPalette = () => {
               background: #393939;
               border: 1px solid #444;
               border-radius: 4px;
-              padding: 4px; 
-              color: #ddd;   
-              margin-bottom: 6px;          
+              padding: 4px;
+              color: #ddd;
+              margin-bottom: 6px;
             `}
             autofocus={true}
-            onBlur={() => setOpen(false || false)}
+            onBlur={() => toggleOpen(false)}
             type="text"
             placeholder="Search"
             onInput={onCommandPaletteInput}
+            onKeyDown={handleKeyDown}
           />
           <div
             style={`max-height: 80vh;
           overflow-y: scroll;`}
           >
-            {openTabs().length && (
-              <div>
-                <h3
-                  style={`
-              color: #888;
-              padding: 5px;
-              font-size: 12px;
-              border-bottom: 1px solid #333;
-              margin: 0 3px;`}
-                >
-                  Tabs
-                </h3>
-                <For each={openTabs()}>
-                  {(match) => {
-                    return (
-                      <CommandPaletteItem
-                        icon={"✨"}
-                        name={match.name}
-                        description={match.description}
-                        onSelect={() => {
-                          focusTabWithId(match.tabId);
-                        }}
-                      />
-                    );
-                  }}
-                </For>
-              </div>
-            )}
-            {fileMatches().length && (
-              <div>
-                <h3
-                  style={`
-              color: #888;
-              padding: 5px;
-              font-size: 12px;
-              border-bottom: 1px solid #333;
-              margin: 0 3px;`}
-                >
-                  Files
-                </h3>
-                <For each={fileMatches()}>
-                  {(match) => {
-                    // const name = basename(match.path);
-                    // const folder = dirname(match.path);
-                    return (
-                      <CommandPaletteItem
-                        icon={"✨"}
-                        name={match.name}
-                        description={match.description}
-                        onSelect={() => {
-                          openFileAt(match.path, 0, 0);
-                        }}
-                      />
-                    );
-                  }}
-                </For>
-              </div>
-            )}
+            <For each={getAllItems()}>
+              {(item, index) => {
+                const isFirstInSection = () => {
+                  if (index() === 0) return true;
+                  const prevItem = getAllItems()[index() - 1];
+                  return item.type !== prevItem?.type;
+                };
+
+                const sectionTitle = () => {
+                  if (item.type === 'tab') return 'Tabs';
+                  if (item.type === 'workspace') return 'Workspace';
+                  if (item.type === 'colab') return 'Colab';
+                  if (item.type === 'file') return 'Files';
+                  return '';
+                };
+
+                return (
+                  <>
+                    {isFirstInSection() && (
+                      <h3
+                        style={`
+                      color: #888;
+                      padding: 5px;
+                      font-size: 12px;
+                      border-bottom: 1px solid #333;
+                      margin: 0 3px;
+                      margin-top: ${index() > 0 ? '10px' : '0'};`}
+                      >
+                        {sectionTitle()}
+                      </h3>
+                    )}
+                    <CommandPaletteItem
+                      icon={
+                        item.type === 'tab' ? '✨' :
+                        item.type === 'workspace' ? '⚙️' :
+                        item.type === 'colab' ? '🔧' :
+                        '✨'
+                      }
+                      name={item.name}
+                      description={item.description}
+                      isSelected={() => index() === selectedIndex()}
+                      onSelect={() => {
+                        if (item.type === 'tab') {
+                          focusTabWithId(item.tabId);
+                        } else if (item.type === 'workspace' || item.type === 'colab') {
+                          item.action();
+                        } else if (item.type === 'file') {
+                          openFileAt(item.path, 0, 0);
+                        }
+                        toggleOpen(false);
+                      }}
+                    />
+                  </>
+                );
+              }}
+            </For>
           </div>
         </div>
       )}
@@ -416,22 +565,37 @@ const CommandPalette = () => {
   );
 };
 
-const CommandPaletteItem = ({ icon, name, description, onSelect }) => {
+const CommandPaletteItem = ({ icon, name, description, onSelect, isSelected }: {
+  icon: string;
+  name: string;
+  description: string;
+  onSelect: () => void;
+  isSelected?: () => boolean;
+}) => {
   const [hover, setHover] = createSignal(false);
+  let itemRef: HTMLDivElement;
+
+  createEffect(() => {
+    if (isSelected?.() && itemRef) {
+      itemRef.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  });
 
   return (
     <div
+      ref={(el) => (itemRef = el)}
       style={`
     display: flex;
     color: #666;
     padding: 0 5px;
-    background: ${hover() ? "#3f5b7c" : "#222"};
-    color: ${hover() ? "#ddd" : "#fff"};    
+    background: ${isSelected?.() ? "#4a6fa5" : hover() ? "#3f5b7c" : "#222"};
+    color: ${hover() || isSelected?.() ? "#ddd" : "#fff"};
     padding: 5px;
     border-radius: 5px;
     align-items: center;
     cursor: pointer;
     text-wrap-mode: nowrap;
+    border: ${isSelected?.() ? "2px solid #6a9fd8" : "2px solid transparent"};
     `}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}

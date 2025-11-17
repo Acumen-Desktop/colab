@@ -42,6 +42,7 @@ export const LLAMA_CPP_BINARY_PATH = join(BUNDLED_BIN_PATH, "llama-cli");
 export const TSSERVER_PATH = join(COLAB_DEPS_PATH, "tsserver");
 // todo: switch to libgit2 and bundle it with co(lab)
 export const GIT_BINARY_PATH = join(BUNDLED_BIN_PATH, "vendor", "git");
+export const FD_BINARY_PATH = join(BUNDLED_BIN_PATH, "vendor", "fd");
 // installations paths
 // bun.sh
 // create a folder for the bundled bun bin to install npm dependencies to

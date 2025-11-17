@@ -658,7 +658,6 @@ export type WorkspaceRPC = {
         path: string;
       };
       createWindow: void;
-      createXtermDemoWindow: void;
       closeWindow: void;
       createWorkspace: void;
       updateWorkspace: {

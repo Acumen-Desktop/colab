@@ -15,7 +15,7 @@ import {
 } from "../../shared/types/types";
 import { isPathSafe } from "../../shared/utils/files";
 import { Utils } from "electrobun/bun";
-import { BUN_BINARY_PATH, COLAB_ENV_PATH } from "../consts/paths";
+import { BUN_BINARY_PATH, COLAB_ENV_PATH, FD_BINARY_PATH } from "../consts/paths";
 import { spawn } from "child_process";
 import path from "path";
 import type { Subprocess } from "bun";
@@ -310,56 +310,57 @@ export function findFilesInFolder(
   query: string = "",
   onResult: (result: string) => void
 ): Subprocess {
-  // console.log("searching2", query, path);
+  // Use bundled fd (faster alternative to find) if available, otherwise fall back to find
+  // fd is much faster and has better defaults for developer workflows
 
-  // todo:
-  // find /path/to/your/folder -type f -name "*match_string*" -not -path "/path/to/your/folder/folder1/*" -not -path "/path/to/your/folder/folder2/*"
+  // Create fuzzy match pattern (e.g., "abc" -> ".*a.*b.*c.*")
+  const fuzzyPattern = query.split("").join(".*");
 
-  const findAllProcess = Bun.spawn(
-    [
-      "find",
-      path,
-      // "-type f",
-      "-type",
-      "f",
+  // Check if bundled fd exists
+  const useFd = existsSync(FD_BINARY_PATH);
 
-      "-not",
-      "-path",
-      "*/.git/*",
+  const fdCommand = [
+    FD_BINARY_PATH,          // Use bundled fd
+    "--type", "f",           // Only files
+    "--hidden",              // Include hidden files
+    // Note: Respects .gitignore by default (no --no-ignore)
+    "--exclude", ".git",     // Exclude .git
+    "--full-path",           // Search full path, not just filename
+    // Note: fd is case-insensitive by default, no flag needed
+    fuzzyPattern,            // The fuzzy pattern
+    path,                    // Search path
+  ];
 
-      "-not",
-      "-path",
-      "*/node_modules/*",
+  const findCommand = [
+    "find",
+    path,
+    "-type",
+    "f",
+    "-not",
+    "-path",
+    "*/.git/*",
+    "-not",
+    "-path",
+    "*/node_modules/*",
+    "-not",
+    "-path",
+    "*/build/*",
+    "-not",
+    "-path",
+    "*/dist/*",
+    "-iregex",
+    `.*${fuzzyPattern}.*`,
+  ];
 
-      "-not",
-      "-path",
-      "*/build/*",
-      // `-not -path "node_modules"`,
-      // "--exclude-dir=.git",
-      // "--exclude-dir=build",
-      // `-name "${query}"`,
-      // "-name",
-      "-iregex",
-      `.*${query.split("").join(".*")}.*`,
-    ],
-    {
-      stdout: "pipe",
-      stderr: "pipe",
-    }
-  );
+  // Use fd if available, otherwise fall back to find
+  const findAllProcess = Bun.spawn(useFd ? fdCommand : findCommand, {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
 
   function processLine(line: string) {
-    console.log("line", line);
-    // const parts = line.split(":");
     if (line.length >= 1) {
-      // const path = parts[0];
-      // const line = parseInt(parts[1], 10);
-      // const match = parts.slice(2).join(":"); // Handles matches containing ":"
-
       onResult(line);
-      // console.log({ file, line: lineNumber, match });
-    } else {
-      // console.log("Invalid line format:", line);
     }
   }
 

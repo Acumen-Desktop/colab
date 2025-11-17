@@ -380,6 +380,11 @@ const rpc = Electroview.defineRPC<WorkspaceRPC>({
         );
       },
       findFilesInWorkspaceResult: ({ query, projectId, results }) => {
+        // Ignore stale results - only process if query matches current query
+        if (query !== state.commandPalette.query) {
+          return;
+        }
+
         setState(
           produce((_state: AppState) => {
             const _findFileResults = _state.commandPalette.results;
@@ -388,15 +393,10 @@ const rpc = Electroview.defineRPC<WorkspaceRPC>({
             }
 
             results.forEach((result) => {
-              const name = basename(result);
-              const folder = dirname(result);
-              const project = _state.projects[projectId];
-
               _findFileResults[projectId].push(result);
             });
           })
         );
-        console.log("findFilesInWorkspaceResult", { query, results });
       },
       openCommandPalette: () => {
         trackFrontend("commandPaletteOpen", {
