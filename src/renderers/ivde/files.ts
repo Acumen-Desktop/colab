@@ -151,7 +151,7 @@ export const getFileTreesChildPathToNode = (nodePath: string): string[] => {
 
 const fileSlates = {
   ".git": {
-    name: "Git",
+    name: "Open GIT Tab",
     type: "git",
     icon: "", //"https://git-scm.com/images/logos/downloads/Git-Icon-1788C.png",
     // TODO: default git config here
@@ -265,6 +265,14 @@ export const getSlateForNode = (
       fileSlates[fileOrFolderName as keyof typeof fileSlates];
 
     if (fileNameSlate) {
+      // For .git, create a custom slate with the parent folder name
+      if (fileOrFolderName === ".git") {
+        const parentFolderName = node.path.split("/").slice(-2, -1)[0] || "Git";
+        return {
+          ...fileNameSlate,
+          name: `Git: ${parentFolderName}`,
+        };
+      }
       return fileNameSlate;
     }
   }

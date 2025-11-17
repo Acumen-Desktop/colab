@@ -73,30 +73,7 @@ export const TopBar = () => {
             state.ui.showSidebar ? "-filled" : ""
           }.svg`}
         />
-      </div>
-
-      {/* Workspace name button - opens command palette */}
-      <div
-        style={{
-          "margin-left": "12px",
-          padding: "4px 12px",
-          "margin-top": "7px",
-          height: "24px",
-          background: "#333",
-          color: "#ddd",
-          "border-radius": "4px",
-          "font-size": "13px",
-          "line-height": "24px",
-          cursor: "pointer",
-          "-webkit-user-select": "none",
-          border: "1px solid #444",
-          display: "flex",
-          "align-items": "center",
-        }}
-        onClick={() => setCommandPaletteOpen(true)}
-      >
-        {state.workspace?.name || "Workspace"}
-      </div>
+      </div>      
 
       <div
         class="electrobun-webkit-app-region-drag"
@@ -449,7 +426,7 @@ const CommandPalette = ({ setOpen }: { setOpen: (value: boolean) => void }) => {
         cursor: pointer;
       `}
       >
-        Search
+        {state.workspace?.name || 'Search'}
       </button>
       <style>
         {`@keyframes fadeIn {

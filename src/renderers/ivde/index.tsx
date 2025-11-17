@@ -2914,7 +2914,7 @@ const NodeSettings = () => {
 
   const onPathChooserClick = async () => {
     const startingFolder =
-      previewNode()?.path || state.paths?.COLAB_HOME_FOLDER || "";
+      previewNode()?.path || state.paths?.COLAB_PROJECTS_FOLDER || "";
     const filesAndFolders = await electrobun.rpc?.request.openFileDialog({
       startingFolder,
       allowedFileTypes: "",

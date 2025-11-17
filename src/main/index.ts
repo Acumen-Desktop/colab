@@ -31,6 +31,7 @@ import {
   COLAB_DEPS_PATH,
   COLAB_ENV_PATH,
   COLAB_HOME_FOLDER,
+  COLAB_PROJECTS_FOLDER,
   COLAB_MODELS_PATH,
   GIT_BINARY_PATH,
   LLAMA_CPP_BINARY_PATH,
@@ -799,6 +800,7 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
             paths: {
               APP_PATH,
               COLAB_HOME_FOLDER,
+              COLAB_PROJECTS_FOLDER,
               COLAB_DEPS_PATH,
               COLAB_ENV_PATH,
               BUN_BINARY_PATH,
@@ -838,14 +840,14 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
 
         newPreviewNode: ({ candidateName }) => {
           const nodeName = getUniqueNewName(
-            COLAB_HOME_FOLDER || "",
+            COLAB_PROJECTS_FOLDER || "",
             "new-project"
           );
 
           const newNode: PreviewFileTreeType = {
             type: "dir",
             name: nodeName,
-            path: join(COLAB_HOME_FOLDER || "", nodeName),
+            path: join(COLAB_PROJECTS_FOLDER || "", nodeName),
             previewChildren: [],
             isExpanded: false,
             slate: {

@@ -793,6 +793,8 @@ export const openNewTabForNode = (
         slateType === "web" ? { type: "web" as const, url: targetUrl } : {};
       const agentTabSettings =
         slateType === "agent" ? { type: "agent" as const, title: slate?.name } : {};
+      const gitTabSettings =
+        slateType === "git" ? { title: slate?.name } : {};
       const tabId = getUniqueId();
       const newPreviewTab: TabType = {
         id: tabId,
@@ -802,6 +804,7 @@ export const openNewTabForNode = (
         path: node.path,
         ...webTabSettings,
         ...agentTabSettings,
+        ...gitTabSettings,
       };
 
       trackFrontend("tabOpen", {

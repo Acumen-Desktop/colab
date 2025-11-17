@@ -104,7 +104,7 @@ const filesToFilter = {
   showall: null,
 };
 
-const CategoryRow = ({ label }: { label: string }) => {
+const CategoryRow = ({ label, showAddButton = false }: { label: string; showAddButton?: boolean }) => {
   const [showHoverControls, setShowHoverControls] = createSignal(false);
   const [isAddButtonHovered, setIsAddButtonHovered] = createSignal(false);
   const [isEmptyWorkspace, setIsEmptyWorkspace] = createSignal(false);
@@ -128,7 +128,7 @@ const CategoryRow = ({ label }: { label: string }) => {
         position: "relative",
         padding: "4px",
       }}
-      onMouseEnter={() => setShowHoverControls(true)}
+      onMouseEnter={() => showAddButton && setShowHoverControls(true)}
       onMouseLeave={() => {
         if (!isEmptyWorkspace()) {
           setShowHoverControls(false);
@@ -136,24 +136,29 @@ const CategoryRow = ({ label }: { label: string }) => {
       }}
     >
       {label}
-      <div
-        style={{
-          position: "absolute",
-          right: "3px",
-          top: "3px",
-          width: "16px",
-          height: "16px",
-          background: isAddButtonHovered() ? "#333" : "#ddd",
-          border: "1px solid #b1b1b1",
-          "text-align": "center",
-          "line-height": "16px",
-          opacity: showHoverControls() ? 1 : 0,
-          cursor: "pointer",
-          "border-radius": "2px",
-        }}
-        onMouseEnter={() => setIsAddButtonHovered(true)}
-        onMouseLeave={() => setIsAddButtonHovered(false)}
-        onClick={() => {
+      <Show when={showAddButton}>
+        <div
+          style={{
+            position: "absolute",
+            right: "6px",
+            top: "6px",
+            width: "18px",
+            height: "18px",
+            background: isAddButtonHovered() ? "rgba(59, 130, 246, 0.15)" : "rgba(0, 0, 0, 0.08)",
+            border: isAddButtonHovered() ? "1px solid rgba(59, 130, 246, 0.4)" : "1px solid rgba(0, 0, 0, 0.15)",
+            "text-align": "center",
+            "line-height": "17px",
+            opacity: showHoverControls() ? 1 : 0,
+            cursor: "pointer",
+            "border-radius": "3px",
+            transition: "all 0.15s ease",
+            color: isAddButtonHovered() ? "rgba(59, 130, 246, 0.9)" : "rgba(0, 0, 0, 0.5)",
+            "font-size": "14px",
+            "font-weight": "500",
+          }}
+          onMouseEnter={() => setIsAddButtonHovered(true)}
+          onMouseLeave={() => setIsAddButtonHovered(false)}
+          onClick={() => {
           electrobun.rpc?.request
             .newPreviewNode({ candidateName: "new-project" })
             .then((newNode) => {
@@ -192,6 +197,7 @@ const CategoryRow = ({ label }: { label: string }) => {
       >
         +
       </div>
+      </Show>
     </div>
   );
 };
@@ -443,7 +449,7 @@ export const ProjectsTree = () => {
 
   return (
     <>
-      <CategoryRow label="Projects" />
+      <CategoryRow label="Projects" showAddButton={true} />
       <For each={projectsAsArray()}>
         {(project) => {
           const node = () => getNode(project.path);
@@ -626,17 +632,26 @@ export const FileTree = ({
                 <div
                   style={`cursor: pointer;
                     margin-left: 20px;
-                    padding: 6px 12px;
-                    font-size: 12px;
-                    background: #3c3c3c;
-                    color: #ccc;
-                    border: 1px solid #555;
+                    padding: 5px 10px;
+                    font-size: 11px;
+                    font-weight: 500;
+                    background: rgba(0, 0, 0, 0.04);
+                    color: rgba(0, 0, 0, 0.55);
+                    border: 1px solid rgba(0, 0, 0, 0.15);
                     border-radius: 4px;
-                    transition: background 0.15s ease;
+                    transition: all 0.15s ease;
                     user-select: none;
                     -webkit-user-select: none;`}
-                  onMouseEnter={(e) => e.currentTarget.style.background = '#4a4a4a'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = '#3c3c3c'}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.12)';
+                    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+                    e.currentTarget.style.color = 'rgba(59, 130, 246, 0.9)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.04)';
+                    e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.15)';
+                    e.currentTarget.style.color = 'rgba(0, 0, 0, 0.55)';
+                  }}
                   onClick={() => {
                     setNumResultsToShow(
                       numResultsToShow() + numResultsHidden()
@@ -686,7 +701,8 @@ const TreeUL = ({
           top: "28px",
           bottom: "4px",
           width: "2px",
-          "background-color": isLeftBarVisible() ? "#585858" : "transparent",
+          opacity: .3,
+          "background-color": isLeftBarVisible() ? "#256491ff" : "transparent",
         }}
       />
       {children}
@@ -1641,11 +1657,11 @@ const NodeName = ({
               
               // If we're hovering and it's a slate with a different display name, show folder name
               if (isHovered() && slate && slate.name && slate.name !== node.name) {
-                return node.name;
+                return slate?.name || node.name;
               }
               
               // Otherwise show the display name (slate name or folder name)
-              return slate?.name || node.name;
+              return node.name;
             })()}
           </span>
 
@@ -1724,18 +1740,21 @@ export const FileTreeItemControlButton = ({
     <div
       title={title}
       style={{
-        padding: "0px 2px",
-        border: "1px solid #b1b1b1",
+        padding: "0px 4px",
+        border: isHovered() ? "1px solid rgba(59, 130, 246, 0.4)" : "1px solid rgba(0, 0, 0, 0.2)",
         margin: "0 2px",
-        color: isHovered() ? "#cccccc" : "#cccccc",
-        "min-width": "15px",
-        height: "15px",
-        background: isHovered() ? "#333" : "#ddd",
+        color: isHovered() ? "rgba(59, 130, 246, 0.9)" : "rgba(0, 0, 0, 0.6)",
+        "min-width": "16px",
+        height: "16px",
+        background: isHovered() ? "rgba(59, 130, 246, 0.15)" : "rgba(0, 0, 0, 0.06)",
         "text-align": "center",
         "line-height": "15px",
         opacity: 1,
         cursor: "pointer",
-        "border-radius": "2px",
+        "border-radius": "3px",
+        transition: "all 0.15s ease",
+        "font-size": "11px",
+        "font-weight": "500",
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -1915,17 +1934,26 @@ const FindAllResultProjectTree = ({ projectId, projectNode }) => {
           <div
             style={`cursor: pointer;
               margin-left: 20px;
-              padding: 6px 12px;
-              font-size: 12px;
-              background: #3c3c3c;
-              color: #ccc;
-              border: 1px solid #555;
+              padding: 5px 10px;
+              font-size: 11px;
+              font-weight: 500;
+              background: rgba(0, 0, 0, 0.04);
+              color: rgba(0, 0, 0, 0.55);
+              border: 1px solid rgba(0, 0, 0, 0.15);
               border-radius: 4px;
-              transition: background 0.15s ease;
+              transition: all 0.15s ease;
               user-select: none;
               -webkit-user-select: none;`}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#4a4a4a'}
-            onMouseLeave={(e) => e.currentTarget.style.background = '#3c3c3c'}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.12)';
+              e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+              e.currentTarget.style.color = 'rgba(59, 130, 246, 0.9)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.04)';
+              e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.15)';
+              e.currentTarget.style.color = 'rgba(0, 0, 0, 0.55)';
+            }}
             onClick={() => {
               setNumResultsToShow(numResultsToShow() + numResultsToIncremenet);
             }}

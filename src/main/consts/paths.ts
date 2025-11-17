@@ -16,6 +16,10 @@ export const COLAB_HOME_FOLDER = join(getPath("home"), COLAB_HOME_FOLDER_NAME);
 if (!existsSync(COLAB_HOME_FOLDER)) {
   mkdirSync(COLAB_HOME_FOLDER, { recursive: true });
 }
+export const COLAB_PROJECTS_FOLDER = join(COLAB_HOME_FOLDER, "projects");
+if (!existsSync(COLAB_PROJECTS_FOLDER)) {
+  mkdirSync(COLAB_PROJECTS_FOLDER, { recursive: true });
+}
 export const COLAB_GOLDFISHDB_PATH = join(COLAB_HOME_FOLDER, ".goldfishdb");
 export const COLAB_DEPS_PATH = join(COLAB_HOME_FOLDER, ".deps");
 export const COLAB_MODELS_PATH = join(COLAB_HOME_FOLDER, "models");
