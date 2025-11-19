@@ -76,6 +76,7 @@ import {
   createDevlinkFiles,
   findAllInFolder,
   findFilesInFolder,
+  findFirstNestedGitRepo,
   getUniqueNewName,
   // parentNodePath,
   // readSlateConfigFile,
@@ -887,7 +888,6 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
           }, 0);
         },
         showContextMenu: ({ menuItems }) => {
-          console.log('setting context menu: ', menuItems)
           Electrobun.ContextMenu.showContextMenu(menuItems);
         },
         // we're not using this anywhere
@@ -939,6 +939,9 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
         },
         gitCheckIsRepoInTree: ({ repoRoot }) => {
           return gitCheckIsRepoInTree(repoRoot);
+        },
+        findFirstNestedGitRepo: ({ searchPath, timeoutMs }) => {
+          return findFirstNestedGitRepo(searchPath, timeoutMs);
         },
         gitRevParse: ({ repoRoot, options }) => {
           return gitRevParse(repoRoot, options);

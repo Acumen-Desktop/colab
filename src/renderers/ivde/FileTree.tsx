@@ -1083,31 +1083,24 @@ const NodeName = ({
       };
 
       const firstNestedGitRepo = async (path: string) => {
-        const stdout = await electrobun.rpc?.request.execSpawnSync({
-          cmd: "find",
-          args: [path, "-type", "d", "-name", ".git"],
-          opts: { encoding: "utf8", shell: true },
-        });
+        try {
+          // Use vendored fd binary for fast searching with timeout
+          // This searches the entire tree to prevent nested git repos
+          const gitPath = await electrobun.rpc?.request.findFirstNestedGitRepo({
+            searchPath: path,
+            timeoutMs: 5000, // 5 second timeout
+          });
 
-        const nestedGitRepos = stdout.split("\n").filter(Boolean);
-
-        if (nestedGitRepos.length > 0) {
-          for (const gitPathToCheck of nestedGitRepos) {
-            const isRepoRoot = await electrobun.rpc?.request.gitCheckIsRepoRoot(
-              { repoRoot: gitPathToCheck }
-            );
-
-            if (isRepoRoot) {
-              return gitPathToCheck;
-            }
-          }
+          return gitPath || false;
+        } catch (error) {
+          console.log(error);
+          return false;
         }
       };
 
       // const unwrappedNodeToRender = unwrap(_nodeToRender);
 
-      electrobun.rpc?.request.showContextMenu({
-        menuItems: [
+      const menuItems = [
           ...openTabs.map((tab, index) => ({
             label: `Focus Tab (${index + 1})`,
             ...createContextMenuAction("focus_tab", {
@@ -1246,13 +1239,16 @@ const NodeName = ({
           },
           {
             label: "Delete Node from Disk",
-            hidden: readonly,
+            hidden: readonly || getSlateForNode(_nodeToRender)?.type === "project",
             ...createContextMenuAction("fully_delete_node_from_disk", {
               nodePath: _nodeToRender?.path,
               projectId: getSlateForNode(_nodeToRender)?.type === "project" ? getProjectForNode(_nodeToRender)?.id : undefined,
             }),
           },
-        ],
+        ];
+
+      await electrobun.rpc?.request.showContextMenu({
+        menuItems,
       });
     };
     showContextMenu();

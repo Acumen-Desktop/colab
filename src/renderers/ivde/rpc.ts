@@ -152,6 +152,13 @@ export type WorkspaceRPC = {
         };
         response: boolean;
       };
+      findFirstNestedGitRepo: {
+        params: {
+          searchPath: string;
+          timeoutMs?: number;
+        };
+        response: string | null;
+      };
       gitRevParse: {
         params: {
           repoRoot: string;

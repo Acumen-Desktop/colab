@@ -393,3 +393,62 @@ export function findFilesInFolder(
 
   return findAllProcess;
 }
+/**
+ * Finds the first nested git repository within a directory
+ * Uses the bundled fd binary for fast searching
+ * @param searchPath - The directory path to search in
+ * @param timeoutMs - Timeout in milliseconds (default: 5000ms = 5s)
+ * @returns The path to the first .git directory found, or null if none found or timeout
+ */
+export async function findFirstNestedGitRepo(
+  searchPath: string,
+  timeoutMs: number = 5000
+): Promise<string | null> {
+  if (!existsSync(FD_BINARY_PATH)) {
+    console.error('[findFirstNestedGitRepo] fd binary not found at:', FD_BINARY_PATH);
+    return null;
+  }
+
+  try {
+    const fdCommand = [
+      FD_BINARY_PATH,
+      "--type", "d",              // Only directories
+      "--hidden",                 // Include hidden directories
+      "--max-results", "1",       // Stop after finding first match
+      "^.git$",                   // Match .git exactly (full depth search)
+      searchPath,                 // Search path
+    ];
+
+    const proc = Bun.spawn(fdCommand, {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    // Race between the fd process and a timeout
+    const resultPromise = new Response(proc.stdout).text();
+    const timeoutPromise = new Promise<string>((resolve) => {
+      setTimeout(() => {
+        proc.kill();
+        resolve('TIMEOUT');
+      }, timeoutMs);
+    });
+
+    const output = await Promise.race([resultPromise, timeoutPromise]);
+
+    // Clean up the process if still running
+    if (!proc.killed) {
+      await proc.exited;
+    }
+
+    if (output === 'TIMEOUT') {
+      console.warn('[findFirstNestedGitRepo] Search timed out after', timeoutMs, 'ms');
+      return null;
+    }
+
+    const trimmedOutput = output.trim();
+    return trimmedOutput ? trimmedOutput : null;
+  } catch (error) {
+    console.error('[findFirstNestedGitRepo] Error:', error);
+    return null;
+  }
+}
