@@ -187,6 +187,11 @@ document.addEventListener(
 					globalFindAllInput?.select();
 				}, 100);
 			}
+		} else if (e.key === "p" && e.metaKey === true && e.shiftKey === true) {
+			// cmd+shift+p - open command palette
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			setState("ui", "showCommandPalette", true);
 		} else if (e.key === "w" && e.metaKey === true && e.shiftKey === true) {
 			electrobun.rpc?.send.closeWindow();
 		} else if (e.key === "w" && e.metaKey === true) {
