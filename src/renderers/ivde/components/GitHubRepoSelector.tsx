@@ -126,10 +126,12 @@ export const GitHubRepoSelector = (props: GitHubRepoSelectorProps): JSXElement =
         defaultBranch = repo.default_branch || repoBranches[0].name;
       }
 
-      setShowBranches(repo);
-
-      // Auto-select the default branch
+      // Auto-select the default branch BEFORE showing branches
+      // This ensures props update before the UI renders
       props.onSelectRepository(repo, defaultBranch, isEmptyRepo);
+
+      // Show branches after selection is set
+      setShowBranches(repo);
     } catch (err) {
       console.error("Error loading branches:", err);
       setError("Failed to load branches");
@@ -182,7 +184,7 @@ export const GitHubRepoSelector = (props: GitHubRepoSelectorProps): JSXElement =
     const isEmptyRepo = selectedBranch?.commit.sha === '';
 
     props.onSelectRepository(repo, branch, isEmptyRepo);
-    setShowBranches(null);
+    // Keep branch selector open so user can switch between branches
   };
 
   if (!githubService.isConnected()) {
@@ -318,12 +320,9 @@ export const GitHubRepoSelector = (props: GitHubRepoSelectorProps): JSXElement =
                     <div>{/* Branch list container - no height restriction, expands naturally */}
                     <For each={branches()}>
                       {(branch) => {
-                        const isSelected = props.selectedRepo?.id === repo.id && props.selectedBranch === branch.name;
                         const isDefault = branch.name === repo.default_branch;
                         const isEmpty = branch.commit.sha === ''; // Empty repo indicator
-                        // Show default branch as pre-selected if no branch is currently selected for this repo
-                        const isPreSelected = showBranches()?.id === repo.id && !props.selectedBranch && (isDefault || isEmpty);
-                        const showAsSelected = isSelected || isPreSelected;
+                        const isSelected = () => props.selectedRepo?.id === repo.id && props.selectedBranch === branch.name;
 
                         return (
                           <div
@@ -332,33 +331,29 @@ export const GitHubRepoSelector = (props: GitHubRepoSelectorProps): JSXElement =
                               padding: "8px 24px",
                               cursor: "pointer",
                               "font-size": "11px",
-                              color: showAsSelected ? "#ffffff" : "#d9d9d9",
+                              color: isSelected() ? "#ffffff" : "#d9d9d9",
                               "border-bottom": "1px solid #2a2a2a",
-                              background: isSelected ? "#0969da" : isPreSelected ? "#0969da88" : "transparent",
-                              "font-weight": showAsSelected || isDefault ? "500" : "normal"
+                              background: isSelected() ? "#0969da" : "transparent",
+                              "font-weight": isSelected() || isDefault ? "500" : "normal"
                             }}
                             onMouseEnter={(e) => {
-                              if (!showAsSelected) e.currentTarget.style.background = "#333";
+                              if (!isSelected()) e.currentTarget.style.background = "#333";
                             }}
                             onMouseLeave={(e) => {
-                              if (!showAsSelected) {
+                              if (!isSelected()) {
                                 e.currentTarget.style.background = "transparent";
-                              } else if (isPreSelected) {
-                                e.currentTarget.style.background = "#0969da88";
                               }
                             }}
                           >
                             <div style="display: flex; align-items: center; gap: 8px;">
-                              <Show when={showAsSelected}>
-                                <span style="color: #ffffff;">
-                                  {isSelected ? "✓" : "○"}
-                                </span>
+                              <Show when={isSelected()}>
+                                <span style="color: #ffffff;">✓</span>
                               </Show>
                               <span>{branch.name}</span>
                               <Show when={isEmpty}>
                                 <span style={{
-                                  background: showAsSelected ? "rgba(255,255,255,0.2)" : "#4a4a6b",
-                                  color: showAsSelected ? "#ffffff" : "#6b9cff",
+                                  background: isSelected() ? "rgba(255,255,255,0.2)" : "#4a4a6b",
+                                  color: isSelected() ? "#ffffff" : "#6b9cff",
                                   padding: "1px 4px",
                                   "border-radius": "2px",
                                   "font-size": "9px"
@@ -368,8 +363,8 @@ export const GitHubRepoSelector = (props: GitHubRepoSelectorProps): JSXElement =
                               </Show>
                               <Show when={isDefault && !isEmpty}>
                                 <span style={{
-                                  background: showAsSelected ? "rgba(255,255,255,0.2)" : "#4a6741",
-                                  color: showAsSelected ? "#ffffff" : "#8bc34a",
+                                  background: isSelected() ? "rgba(255,255,255,0.2)" : "#4a6741",
+                                  color: isSelected() ? "#ffffff" : "#8bc34a",
                                   padding: "1px 4px",
                                   "border-radius": "2px",
                                   "font-size": "9px"
@@ -379,8 +374,8 @@ export const GitHubRepoSelector = (props: GitHubRepoSelectorProps): JSXElement =
                               </Show>
                               <Show when={branch.protected}>
                                 <span style={{
-                                  background: showAsSelected ? "rgba(255,255,255,0.2)" : "#6b4a1a",
-                                  color: showAsSelected ? "#ffffff" : "#ffa500",
+                                  background: isSelected() ? "rgba(255,255,255,0.2)" : "#6b4a1a",
+                                  color: isSelected() ? "#ffffff" : "#ffa500",
                                   padding: "1px 4px",
                                   "border-radius": "2px",
                                   "font-size": "9px"
