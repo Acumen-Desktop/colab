@@ -151,6 +151,7 @@ export const createModel = async (absolutePath: string) => {
         if (node.type === "file") {
           node.model = model;
           node.persistedContent = contents;
+          node.isCached = true; // Mark file as loaded so external changes trigger editor updates
         }
       })
     );
