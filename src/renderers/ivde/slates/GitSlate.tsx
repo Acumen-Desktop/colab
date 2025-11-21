@@ -345,6 +345,7 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
   const [isAmendChecked, setIsAmendChecked] = createSignal(false);
   const [subjectValue, setSubjectValue] = createSignal("");
   const [descriptionValue, setDescriptionValue] = createSignal("");
+  const [showEmptyMessageError, setShowEmptyMessageError] = createSignal(false);
 
   // Stash form state
   const [showStashForm, setShowStashForm] = createSignal(false);
@@ -585,9 +586,12 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
     const isAmend = amendRef?.checked || false;
 
     if (!subject) {
-      // TODO: Show error message 
+      setShowEmptyMessageError(true);
       return;
     }
+
+    // Clear error if we got here
+    setShowEmptyMessageError(false);
 
     // Auto-split long subjects at 72 characters
     if (subject.length > 72) {
@@ -1714,8 +1718,27 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
                         const value = e.currentTarget.value;
                         setSubjectValue(value);
                         setSubjectLength(value.length);
+                        // Clear error when user starts typing
+                        if (showEmptyMessageError()) {
+                          setShowEmptyMessageError(false);
+                        }
                       }}
                     />
+
+                    {/* Error message for empty commit message */}
+                    <Show when={showEmptyMessageError()}>
+                      <div
+                        style={{
+                          color: "#f87171",
+                          "font-size": "11px",
+                          "font-family": "'Segoe UI', system-ui, sans-serif",
+                          "margin-top": "4px",
+                          "padding-left": "2px",
+                        }}
+                      >
+                        Commit message cannot be empty
+                      </div>
+                    </Show>
                   </div>
 
                   {/* Description */}
