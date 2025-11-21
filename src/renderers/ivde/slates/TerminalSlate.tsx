@@ -1,6 +1,6 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { produce } from "solid-js/store";
-import { type TerminalTabType, getWindow, setState } from "../store";
+import { type TerminalTabType, getWindow, setState, openNewTabForNode } from "../store";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -101,8 +101,11 @@ export const TerminalSlate = ({ tabId }: { tabId: string }) => {
       fitAddon = new FitAddon();
       terminal.loadAddon(fitAddon);
       
-      // Add web links addon
-      const webLinksAddon = new WebLinksAddon();
+      // Add web links addon with handler to open URLs in new web tabs
+      const webLinksAddon = new WebLinksAddon((event: MouseEvent, uri: string) => {
+        event.preventDefault();
+        openNewTabForNode('__COLAB_INTERNAL__/web', false, { focusNewTab: true, url: uri });
+      });
       terminal.loadAddon(webLinksAddon);
       
       terminal.open(terminalElement);
