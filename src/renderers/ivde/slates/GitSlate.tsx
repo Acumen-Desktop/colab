@@ -585,7 +585,7 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
     const isAmend = amendRef?.checked || false;
 
     if (!subject) {
-      // TODO: Show error message
+      // TODO: Show error message 
       return;
     }
 
@@ -597,11 +597,13 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
       description = description ? `${overflow}\n\n${description}` : overflow;
     }
 
+
     // Construct commit message (subject + description with blank line between)
     const commitMessage = description
       ? `${subject}\n\n${description}`
       : subject;
 
+    console.log('commit message: ', commitMessage);
     // Clear form
     setSubjectValue("");
     setSubjectLength(0);
@@ -747,6 +749,7 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
           return acc;
         }, {}) || {},
         message: commit.message,
+        body: commit.body,
         shortStat: `added: ${commit.diff?.insertions || 0} removed: ${commit.diff?.deletions || 0} changed: ${commit.diff?.changed || 0}`,
         refs: refsMap.get(commit.hash) || [],
         isRemoteOnly: true, // Flag to show with lower opacity
@@ -777,6 +780,7 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
           return acc;
         }, {}) || {},
         message: commit.message,
+        body: commit.body,
         shortStat: `added: ${commit.diff?.insertions || 0} removed: ${commit.diff?.deletions || 0} changed: ${commit.diff?.changed || 0}`,
         refs: refsMap.get(commit.hash) || [],
         isRemoteOnly: false,
@@ -926,6 +930,7 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
             hash: commit.hash,
             files: files,
             message: commit.message || "",
+            body: commit.body,
             shortStat: "",
             refs: [], // Will be populated if needed
             isRemoteOnly: false,
@@ -2346,8 +2351,8 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
                             "overflow-y": "auto",
                             "word-break": "break-word",
                           }}
-                        >
-                          {commit.message}
+                        >                          
+                          {commit.body ? `${commit.message}\n\n${commit.body}` : commit.message}
                         </div>
                       </div>
 
