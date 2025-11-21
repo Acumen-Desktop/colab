@@ -580,17 +580,25 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
   const onClickSaveBackup = async (e?: Event) => {
     e?.preventDefault();
 
-    const subject = subjectValue()?.trim();
-    const description = descriptionValue()?.trim();
+    let subject = subjectValue()?.trim();
+    let description = descriptionValue()?.trim();
     const isAmend = amendRef?.checked || false;
-    
+
     if (!subject) {
       // TODO: Show error message
       return;
     }
 
+    // Auto-split long subjects at 72 characters
+    if (subject.length > 72) {
+      const overflow = subject.slice(72).trim();
+      subject = subject.slice(0, 72).trimEnd() + "...";
+      // Prepend overflow to description
+      description = description ? `${overflow}\n\n${description}` : overflow;
+    }
+
     // Construct commit message (subject + description with blank line between)
-    const commitMessage = description 
+    const commitMessage = description
       ? `${subject}\n\n${description}`
       : subject;
 
@@ -1682,13 +1690,12 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
                       ref={backupLabelRef}
                       name="subject"
                       placeholder="Brief description of changes"
-                      maxLength="72"
                       value={subjectValue()}
                       style={{
                         width: "100%",
                         background: "#3c3c3c",
-                        border: subjectLength() > 50 
-                          ? "1px solid #f87171" 
+                        border: subjectLength() > 50
+                          ? "1px solid #f87171"
                           : "1px solid #464647",
                         "border-radius": "2px",
                         color: "#cccccc",
