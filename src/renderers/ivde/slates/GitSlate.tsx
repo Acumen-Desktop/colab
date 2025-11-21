@@ -2310,57 +2310,47 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
                         "margin-left": "20px",
                       }}
                     >
-                      {/* Description section */}
-                      {(() => {
-                        const lines = commit.message.split('\n');
-                        const description = lines.slice(1).join('\n').trim();
-                        
-                        if (description) {
-                          return (
-                            <div
-                              style={{
-                                padding: "12px",
-                                "border-bottom": "1px solid #2d2d2d",
-                                "margin-bottom": "4px",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  color: "#cccccc",
-                                  "font-size": "11px",
-                                  "font-weight": "600",
-                                  "text-transform": "uppercase",
-                                  "letter-spacing": "0.5px",
-                                  "font-family": "'Segoe UI', system-ui, sans-serif",
-                                  "margin-bottom": "6px",
-                                }}
-                              >
-                                DESCRIPTION
-                              </div>
-                              <div
-                                style={{
-                                  background: "#2d2d2d",
-                                  border: "1px solid #404040",
-                                  "border-radius": "3px",
-                                  padding: "8px 10px",
-                                  color: "#e0e0e0",
-                                  "font-size": "12px",
-                                  "font-family": "'Segoe UI', system-ui, sans-serif",
-                                  "line-height": "1.4",
-                                  "white-space": "pre-wrap",
-                                  "max-height": "120px",
-                                  "overflow-y": "auto",
-                                  "word-break": "break-word",
-                                }}
-                              >
-                                {description}
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
-                      
+                      {/* Full commit message section */}
+                      <div
+                        style={{
+                          padding: "12px",
+                          "border-bottom": "1px solid #2d2d2d",
+                          "margin-bottom": "4px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            color: "#cccccc",
+                            "font-size": "11px",
+                            "font-weight": "600",
+                            "text-transform": "uppercase",
+                            "letter-spacing": "0.5px",
+                            "font-family": "'Segoe UI', system-ui, sans-serif",
+                            "margin-bottom": "6px",
+                          }}
+                        >
+                          COMMIT MESSAGE
+                        </div>
+                        <div
+                          style={{
+                            background: "#2d2d2d",
+                            border: "1px solid #404040",
+                            "border-radius": "3px",
+                            padding: "8px 10px",
+                            color: "#e0e0e0",
+                            "font-size": "12px",
+                            "font-family": "'Segoe UI', system-ui, sans-serif",
+                            "line-height": "1.4",
+                            "white-space": "pre-wrap",
+                            "max-height": "120px",
+                            "overflow-y": "auto",
+                            "word-break": "break-word",
+                          }}
+                        >
+                          {commit.message}
+                        </div>
+                      </div>
+
                       {/* Files changed section */}
                       <For each={Object.entries(commit.files)}>
                         {([filepath, filechange]) => {
