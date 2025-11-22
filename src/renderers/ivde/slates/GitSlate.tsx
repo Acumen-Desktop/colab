@@ -3878,7 +3878,7 @@ const Dialog = ({
   if (!isOpen()) return null;
 
   return (
-    <div
+    <div      
       style={{
         position: "fixed",
         top: "0",
@@ -3894,6 +3894,7 @@ const Dialog = ({
       onClick={onCancel}
     >
       <div
+        class="webview-overlay"
         style={{
           background: "#2d2d2d",
           border: "1px solid #454545",
