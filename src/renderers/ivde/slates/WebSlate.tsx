@@ -82,6 +82,31 @@ export const WebSlate = ({
     return "system";
   };
 
+  // Helper to detect corrupted or invalid titles
+  const isCorruptedTitle = (title: string): boolean => {
+    if (!title || typeof title !== 'string') {
+      return true;
+    }
+
+    // Check for replacement character (�) which indicates UTF-8 decoding errors
+    if (title.includes('\uFFFD')) {
+      return true;
+    }
+
+    // Ignore DevTools title changes (this happens when inspecting elements)
+    if (title.toLowerCase() === 'devtools') {
+      return true;
+    }
+
+    // Check for other common corrupted patterns
+    // (null bytes, control characters except newline/tab)
+    if (/[\x00-\x08\x0B-\x0C\x0E-\x1F]/.test(title)) {
+      return true;
+    }
+
+    return false;
+  };
+
   // just get this once, so we have unidirectinoal flow on navigate -> update store
   // Note: initialUrl must be a valid url, otherwise webview will not initialize properly
   // and will throw. eg: when editing the url in the url bar there won't be a webcontents initialized
@@ -347,9 +372,11 @@ console.log('Preload script loaded for:', window.location.href);
       return;
     }
 
+    // Get title from tab state
+    const _tab = tab();
+    const pageTitle = _tab?.type === "web" ? _tab.title : null;
+
     try {
-      // Get title from tab state
-      const pageTitle = _tab?.type === "web" ? _tab.title : null;
       
       // Use the shared utility to create a proper browser profile folder name
       const nodeName = await createBrowserProfileFolderName(
@@ -633,7 +660,7 @@ console.log('Preload script loaded for:', window.location.href);
             // Update title when DOM is ready
             const pageTitle = webviewRef?.getTitle?.();
             console.log("getTitle result:", pageTitle);
-            if (pageTitle) {
+            if (pageTitle && typeof pageTitle === 'string' && !isCorruptedTitle(pageTitle)) {
               setState(
                 produce((_state: AppState) => {
                   const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
@@ -646,12 +673,16 @@ console.log('Preload script loaded for:', window.location.href);
           // Listen for page title updates
           webviewRef.on("page-title-updated", (e: any) => {
             console.log("page-title-updated event:", e.detail);
-            setState(
-              produce((_state: AppState) => {
-                const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
-                _tab.title = e.detail;
-              })
-            );
+            // Validate title before setting it
+            const newTitle = e.detail;
+            if (typeof newTitle === 'string' && newTitle.trim() && !isCorruptedTitle(newTitle)) {
+              setState(
+                produce((_state: AppState) => {
+                  const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
+                  _tab.title = newTitle;
+                })
+              );
+            }
           });
 
           // Also listen for when loading stops to get the title
@@ -659,14 +690,14 @@ console.log('Preload script loaded for:', window.location.href);
             // Try getting title directly
             const pageTitle = webviewRef?.getTitle?.();
             console.log("did-stop-loading, title from getTitle:", pageTitle);
-            
+
             // Also try executing JavaScript to get the title
             try {
               const titleFromJS = await webviewRef?.executeJavaScript?.("document.title");
               console.log("did-stop-loading, title from JS:", titleFromJS);
-              
+
               const finalTitle = pageTitle || titleFromJS;
-              if (finalTitle) {
+              if (finalTitle && typeof finalTitle === 'string' && !isCorruptedTitle(finalTitle)) {
                 setState(
                   produce((_state: AppState) => {
                     const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
@@ -724,12 +755,22 @@ console.log('Preload script loaded for:', window.location.href);
               produce((_state: AppState) => {
                 const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
                 _tab.url = e.detail;
-                // For now, extract hostname as title until we can get the real title
-                try {
-                  const url = new URL(e.detail);
-                  _tab.title = url.hostname;
-                } catch (err) {
-                  _tab.title = e.detail;
+
+                // Only set a temporary hostname-based title if:
+                // 1. There's no existing title, OR
+                // 2. The existing title is corrupted
+                const currentTitle = _tab.title;
+                const shouldSetTempTitle = !currentTitle || isCorruptedTitle(currentTitle);
+
+                if (shouldSetTempTitle) {
+                  // Extract hostname as a temporary title until we get the real page title
+                  try {
+                    const url = new URL(e.detail);
+                    _tab.title = url.hostname;
+                  } catch (err) {
+                    // Invalid URL, don't set a title - wait for page-title-updated event
+                    console.warn("Invalid URL in did-navigate:", e.detail);
+                  }
                 }
               })
             );
@@ -780,7 +821,7 @@ console.log('Preload script loaded for:', window.location.href);
                 _tab.url = e.detail;
                 // Get the title after in-page navigation
                 const pageTitle = webviewRef?.getTitle();
-                if (pageTitle) {
+                if (pageTitle && typeof pageTitle === 'string' && !isCorruptedTitle(pageTitle)) {
                   _tab.title = pageTitle;
                 }
               })
