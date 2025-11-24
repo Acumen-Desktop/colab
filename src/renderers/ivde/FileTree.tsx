@@ -681,10 +681,14 @@ const TreeUL = ({
   // needs some style tweaking to look good
   showLeftBar?: boolean;
 }) => {
-  const [isHovered, setIsHovered] = createSignal(false);
+  const [isSelfHovered, setIsSelfHovered] = createSignal(false);
+  const [hasHoveredChild, setHasHoveredChild] = createSignal(false);
+
+  // Only show spine when this UL is hovered and no nested TreeUL child is hovered
   const isLeftBarVisible = () => {
-    return showLeftBar && isHovered();
+    return showLeftBar && isSelfHovered() && !hasHoveredChild();
   };
+
   return (
     <ul
       style={{
@@ -693,8 +697,29 @@ const TreeUL = ({
         "list-style": "none",
         overflow: "show",
       }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={(e) => {
+        setIsSelfHovered(true);
+        // Notify parent TreeUL that a child is now hovered
+        const parentUL = (e.currentTarget as HTMLElement).parentElement?.closest('ul');
+        if (parentUL) {
+          parentUL.dispatchEvent(new CustomEvent('child-tree-hover', { bubbles: false, detail: true }));
+        }
+      }}
+      onMouseLeave={(e) => {
+        setIsSelfHovered(false);
+        setHasHoveredChild(false);
+        // Notify parent TreeUL that child is no longer hovered
+        const parentUL = (e.currentTarget as HTMLElement).parentElement?.closest('ul');
+        if (parentUL) {
+          parentUL.dispatchEvent(new CustomEvent('child-tree-hover', { bubbles: false, detail: false }));
+        }
+      }}
+      // Listen for custom events from child TreeUL elements
+      ref={(el) => {
+        el.addEventListener('child-tree-hover', ((e: CustomEvent) => {
+          setHasHoveredChild(e.detail);
+        }) as EventListener);
+      }}
     >
       <div
         style={{
