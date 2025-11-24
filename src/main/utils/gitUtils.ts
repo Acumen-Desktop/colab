@@ -89,9 +89,21 @@ export const gitRevParse = (repoRoot: string, options: string[]) => {
 };
 
 export const initGit = async (repoRoot: string) => {
-  return git(repoRoot)
-    .init(["--initial-branch", "main"])
-    .catch((e) => console.log("error: ", e));
+  try {
+    // Initialize with main branch
+    await git(repoRoot).init(["--initial-branch", "main"]);
+
+    // Create an initial commit to establish the main branch
+    // Without a commit, the branch doesn't actually exist yet
+    const gitignorePath = path.join(repoRoot, '.gitignore');
+    fs.writeFileSync(gitignorePath, '# Add files to ignore here\n');
+    await git(repoRoot).add('.gitignore');
+    await git(repoRoot).commit('Initial commit');
+
+    console.log('Successfully initialized git with main branch');
+  } catch (e) {
+    console.log("error: ", e);
+  }
 };
 
 export const gitValidateUrl = async (gitUrl: string) => {
@@ -238,6 +250,16 @@ export const gitRemote = async (repoRoot: string) => {
   } catch (error) {
     console.error('Git remote error:', error);
     return [];
+  }
+};
+
+export const gitAddRemote = async (repoRoot: string, remoteName: string, remoteUrl: string) => {
+  try {
+    await git(repoRoot).addRemote(remoteName, remoteUrl);
+    return `Successfully added remote ${remoteName}`;
+  } catch (error) {
+    console.error('Git add remote error:', error);
+    throw error;
   }
 };
 

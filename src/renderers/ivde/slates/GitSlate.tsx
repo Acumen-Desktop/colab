@@ -353,7 +353,12 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
   
   const [showBranchInput, setShowBranchInput] = createSignal(false);
   const [branchInputValue, setBranchInputValue] = createSignal("");
-  
+
+  // Remote form state
+  const [showRemoteInput, setShowRemoteInput] = createSignal(false);
+  const [remoteNameValue, setRemoteNameValue] = createSignal("");
+  const [remoteUrlValue, setRemoteUrlValue] = createSignal("");
+
   // Alt key state for modifier actions
   const [isAltPressed, setIsAltPressed] = createSignal(false);
   
@@ -396,11 +401,11 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
   const handleCreateBranch = async () => {
     const branchName = branchInputValue().trim();
     const validation = validateBranchName(branchName);
-    
+
     if (!validation.isValid) {
       return;
     }
-    
+
     try {
       console.log('Creating branch:', branchName);
       await electrobun.rpc?.request.gitCreateBranch({
@@ -413,12 +418,77 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
       await new Promise(resolve => setTimeout(resolve, 1000));
       await getLogAndStatus();
       console.log('Status refreshed after branch creation');
-      
+
       // Reset form state
       setShowBranchInput(false);
       setBranchInputValue("");
     } catch (error) {
       console.error('Failed to create branch:', error);
+      // Keep the form open so user can see the error and try again
+    }
+  };
+
+  // Remote name validation
+  const validateRemoteName = (name: string): { isValid: boolean; error?: string } => {
+    if (!name.trim()) {
+      return { isValid: false, error: "Remote name cannot be empty" };
+    }
+
+    // Git remote name rules:
+    // - No spaces
+    // - No special characters
+    const invalidChars = /[\s~^:\\?*\[]/;
+    if (invalidChars.test(name)) {
+      return { isValid: false, error: "Remote name cannot contain spaces or special characters" };
+    }
+
+    return { isValid: true };
+  };
+
+  // Remote URL validation
+  const validateRemoteUrl = (url: string): { isValid: boolean; error?: string } => {
+    if (!url.trim()) {
+      return { isValid: false, error: "Remote URL cannot be empty" };
+    }
+
+    // Basic URL validation - check if it's a valid git URL
+    const isValidUrl = url.match(/^(https?:\/\/|git@|ssh:\/\/|file:\/\/)/);
+    if (!isValidUrl) {
+      return { isValid: false, error: "Invalid URL format (must start with https://, git@, ssh://, or file://)" };
+    }
+
+    return { isValid: true };
+  };
+
+  const handleAddRemote = async () => {
+    const remoteName = remoteNameValue().trim();
+    const remoteUrl = remoteUrlValue().trim();
+    const nameValidation = validateRemoteName(remoteName);
+    const urlValidation = validateRemoteUrl(remoteUrl);
+
+    if (!nameValidation.isValid || !urlValidation.isValid) {
+      return;
+    }
+
+    try {
+      console.log('Adding remote:', remoteName, remoteUrl);
+      await electrobun.rpc?.request.gitAddRemote({
+        repoRoot: repoRootPath,
+        remoteName: remoteName,
+        remoteUrl: remoteUrl
+      });
+      console.log('Remote added, refreshing status...');
+      // Small delay to ensure git operation is fully committed
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await getLogAndStatus();
+      console.log('Status refreshed after adding remote');
+
+      // Reset form state
+      setShowRemoteInput(false);
+      setRemoteNameValue("");
+      setRemoteUrlValue("");
+    } catch (error) {
+      console.error('Failed to add remote:', error);
       // Keep the form open so user can see the error and try again
     }
   };
@@ -2970,22 +3040,169 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
                       "font-family": "'Segoe UI', system-ui, sans-serif",
                     }}
                     onClick={() => {
-                      // TODO: Open workspace settings to remotes/OAuth section
-                      console.log('Add Remote clicked - will open workspace settings');
+                      setShowRemoteInput(true);
                     }}
-                    onMouseEnter={(e) => { 
-                      e.currentTarget.style.background = "#4fc3f7"; 
-                      e.currentTarget.style.color = "#000"; 
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "#4fc3f7";
+                      e.currentTarget.style.color = "#000";
                     }}
-                    onMouseLeave={(e) => { 
-                      e.currentTarget.style.background = "transparent"; 
-                      e.currentTarget.style.color = "#4fc3f7"; 
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                      e.currentTarget.style.color = "#4fc3f7";
                     }}
                   >
                     + Add Remote
                   </button>
                 </div>
-                
+
+                {/* Remote Input Form */}
+                <Show when={showRemoteInput()}>
+                  <div style={{
+                    padding: "12px",
+                    "border-bottom": "1px solid #2d2d2d",
+                    background: "#1e1e1e"
+                  }}>
+                    <div style={{ "margin-bottom": "8px" }}>
+                      <input
+                        type="text"
+                        placeholder="Remote name (e.g., origin)"
+                        value={remoteNameValue()}
+                        onInput={(e) => setRemoteNameValue(e.currentTarget.value)}
+                        style={{
+                          background: "#252526",
+                          border: "1px solid #094771",
+                          color: "#fff",
+                          "font-size": "11px",
+                          "font-family": "'Segoe UI', system-ui, sans-serif",
+                          padding: "6px 8px",
+                          "border-radius": "3px",
+                          outline: "none",
+                          width: "100%",
+                          "box-sizing": "border-box",
+                          "margin-bottom": "8px"
+                        }}
+                        onFocus={(e) => { e.currentTarget.style.borderColor = "#4fc3f7"; }}
+                        onBlur={(e) => { e.currentTarget.style.borderColor = "#094771"; }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const nameValid = validateRemoteName(remoteNameValue()).isValid;
+                            const urlValid = validateRemoteUrl(remoteUrlValue()).isValid;
+                            if (nameValid && urlValid) {
+                              handleAddRemote();
+                            }
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setShowRemoteInput(false);
+                            setRemoteNameValue("");
+                            setRemoteUrlValue("");
+                          }
+                        }}
+                        ref={(el) => {
+                          // Auto-focus when input appears
+                          setTimeout(() => el?.focus(), 0);
+                        }}
+                      />
+                      <Show when={remoteNameValue().trim() && !validateRemoteName(remoteNameValue()).isValid}>
+                        <div style={{
+                          color: "#ff6b6b",
+                          "font-size": "10px",
+                          "font-family": "'Segoe UI', system-ui, sans-serif",
+                          padding: "2px 0 6px 0"
+                        }}>
+                          {validateRemoteName(remoteNameValue()).error}
+                        </div>
+                      </Show>
+                      <input
+                        type="text"
+                        placeholder="Remote URL (e.g., https://github.com/user/repo.git)"
+                        value={remoteUrlValue()}
+                        onInput={(e) => setRemoteUrlValue(e.currentTarget.value)}
+                        style={{
+                          background: "#252526",
+                          border: "1px solid #094771",
+                          color: "#fff",
+                          "font-size": "11px",
+                          "font-family": "'Segoe UI', system-ui, sans-serif",
+                          padding: "6px 8px",
+                          "border-radius": "3px",
+                          outline: "none",
+                          width: "100%",
+                          "box-sizing": "border-box"
+                        }}
+                        onFocus={(e) => { e.currentTarget.style.borderColor = "#4fc3f7"; }}
+                        onBlur={(e) => { e.currentTarget.style.borderColor = "#094771"; }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const nameValid = validateRemoteName(remoteNameValue()).isValid;
+                            const urlValid = validateRemoteUrl(remoteUrlValue()).isValid;
+                            if (nameValid && urlValid) {
+                              handleAddRemote();
+                            }
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setShowRemoteInput(false);
+                            setRemoteNameValue("");
+                            setRemoteUrlValue("");
+                          }
+                        }}
+                      />
+                      <Show when={remoteUrlValue().trim() && !validateRemoteUrl(remoteUrlValue()).isValid}>
+                        <div style={{
+                          color: "#ff6b6b",
+                          "font-size": "10px",
+                          "font-family": "'Segoe UI', system-ui, sans-serif",
+                          padding: "2px 0"
+                        }}>
+                          {validateRemoteUrl(remoteUrlValue()).error}
+                        </div>
+                      </Show>
+                    </div>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        style={{
+                          background: (validateRemoteName(remoteNameValue()).isValid && validateRemoteUrl(remoteUrlValue()).isValid) ? "#094771" : "#333",
+                          border: "1px solid #094771",
+                          color: (validateRemoteName(remoteNameValue()).isValid && validateRemoteUrl(remoteUrlValue()).isValid) ? "#fff" : "#999",
+                          "font-size": "10px",
+                          "font-weight": "600",
+                          padding: "4px 8px",
+                          "border-radius": "3px",
+                          cursor: (validateRemoteName(remoteNameValue()).isValid && validateRemoteUrl(remoteUrlValue()).isValid) ? "pointer" : "not-allowed",
+                          "font-family": "'Segoe UI', system-ui, sans-serif",
+                          flex: 1
+                        }}
+                        onClick={handleAddRemote}
+                        disabled={!(validateRemoteName(remoteNameValue()).isValid && validateRemoteUrl(remoteUrlValue()).isValid)}
+                      >
+                        Add
+                      </button>
+                      <button
+                        style={{
+                          background: "transparent",
+                          border: "1px solid #555",
+                          color: "#ccc",
+                          "font-size": "10px",
+                          "font-weight": "600",
+                          padding: "4px 8px",
+                          "border-radius": "3px",
+                          cursor: "pointer",
+                          "font-family": "'Segoe UI', system-ui, sans-serif",
+                          flex: 1
+                        }}
+                        onClick={() => {
+                          setShowRemoteInput(false);
+                          setRemoteNameValue("");
+                          setRemoteUrlValue("");
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </Show>
+
                 <Show
                   when={uiState.remotes?.length > 0}
                   fallback={

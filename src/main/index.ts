@@ -113,6 +113,7 @@ import {
   gitClone,
   gitValidateUrl,
   gitRemote,
+  gitAddRemote,
   gitFetch,
   gitPull,
   gitPush,
@@ -1026,6 +1027,9 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
         },
         gitTrackRemoteBranch: ({ repoRoot, branchName, remoteName }) => {
           return gitTrackRemoteBranch(repoRoot, branchName, remoteName);
+        },
+        gitAddRemote: ({ repoRoot, remoteName, remoteUrl }) => {
+          return gitAddRemote(repoRoot, remoteName, remoteUrl);
         },
         syncWorkspace: (data) => {
           const { workspace: _workspace } = data;
