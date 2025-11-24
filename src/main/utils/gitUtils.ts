@@ -796,7 +796,49 @@ export const gitStageMonacoChange = async (
 
 export const gitCreateBranch = async (repoRoot: string, branchName: string, options: string[] = []) => {
   try {
-    await git(repoRoot).checkoutLocalBranch(branchName, options);
+    const gitInstance = git(repoRoot);
+
+    // Check if there are any commits at all
+    let hasCommits = false;
+    try {
+      await gitInstance.log(['-1']);
+      hasCommits = true;
+    } catch (logError) {
+      // No commits exist
+      hasCommits = false;
+    }
+
+    if (!hasCommits) {
+      console.log('Repository has no commits, creating initial commit before branch creation...');
+      const gitignorePath = path.join(repoRoot, '.gitignore');
+
+      // Only create .gitignore if it doesn't exist
+      if (!fs.existsSync(gitignorePath)) {
+        fs.writeFileSync(gitignorePath, '# Add files to ignore here\n');
+        await gitInstance.add('.gitignore');
+      } else {
+        // If .gitignore exists, just add it
+        await gitInstance.add('.gitignore');
+      }
+
+      await gitInstance.commit('Initial commit');
+
+      // Now create the branch from current HEAD
+      await gitInstance.checkoutBranch(branchName, 'HEAD');
+    } else {
+      // Check if we're in a detached HEAD state
+      const status = await gitInstance.status();
+
+      if (status.detached) {
+        // Detached HEAD with commits - create branch from current HEAD
+        console.log('Detached HEAD state, creating branch from current HEAD...');
+        await gitInstance.checkoutBranch(branchName, 'HEAD');
+      } else {
+        // Normal case: create and checkout a new branch
+        await gitInstance.checkoutLocalBranch(branchName, options);
+      }
+    }
+
     return `Successfully created and checked out new branch: ${branchName}`;
   } catch (error) {
     console.error('Git create branch error:', error);
