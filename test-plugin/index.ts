@@ -152,6 +152,21 @@ export async function activate(api: PluginAPI): Promise<void> {
     }, duration);
   };
 
+  // Update the status bar periodically with a random cat emoji
+  const catEmojis = ['🐱', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾'];
+  let catCount = 0;
+  const statusInterval = setInterval(() => {
+    catCount++;
+    const randomCat = catEmojis[catCount % catEmojis.length];
+    const savedColor = api.settings.get<string>('statusBarColor') || '#ffcc00';
+    if (catModeEnabled) {
+      statusBarItem.update({ text: `😻 CATS! (${catCount})`, color: '#00ff00' });
+    } else {
+      statusBarItem.update({ text: `${randomCat} Cat Mode (${catCount})`, color: savedColor });
+    }
+  }, 5000);
+  disposables.push({ dispose: () => clearInterval(statusInterval) });
+
   // Register file decoration provider - mark .cat files with a cat badge
   const decorationDisposable = api.fileDecorations.registerProvider({
     provideDecoration(filePath) {
@@ -188,6 +203,89 @@ export async function activate(api: PluginAPI): Promise<void> {
     when: 'global',
   });
   disposables.push(keybindingDisposable);
+
+  // Register settings schema
+  const settingsDisposable = api.settings.registerSchema({
+    title: '🐱 Cat Replacer Settings',
+    description: 'Configure the Cat Image Replacer plugin',
+    fields: [
+      {
+        key: 'autoEnable',
+        label: 'Auto-enable Cat Mode',
+        type: 'boolean',
+        default: false,
+        description: 'Automatically enable cat mode when the plugin loads',
+      },
+      {
+        key: 'catService',
+        label: 'Cat Image Service',
+        type: 'select',
+        default: 'cataas',
+        description: 'Which service to use for cat images',
+        options: [
+          { label: 'Cat as a Service (cataas.com)', value: 'cataas' },
+          { label: 'The Cat API (thecatapi.com)', value: 'thecatapi' },
+          { label: 'Random Cat (random.cat)', value: 'randomcat' },
+        ],
+      },
+      {
+        key: 'replaceDelay',
+        label: 'Replace Delay (ms)',
+        type: 'number',
+        default: 2000,
+        min: 500,
+        max: 10000,
+        step: 500,
+        description: 'How long to wait before replacing images (in milliseconds)',
+      },
+      {
+        key: 'meowCount',
+        label: 'Default Meow Count',
+        type: 'number',
+        default: 3,
+        min: 1,
+        max: 20,
+        step: 1,
+        description: 'Default number of meows when using the meow terminal command',
+      },
+      {
+        key: 'statusBarColor',
+        label: 'Status Bar Color',
+        type: 'color',
+        default: '#ffcc00',
+        description: 'Color for the cat mode status bar indicator',
+      },
+    ],
+  });
+  disposables.push(settingsDisposable);
+
+  // Listen for settings changes and update behavior
+  const settingsChangeDisposable = api.settings.onChange((key, value) => {
+    api.log.info(`Setting changed: ${key} = ${value}`);
+
+    if (key === 'statusBarColor') {
+      statusBarItem.update({ color: value as string });
+    }
+
+    if (key === 'autoEnable' && value === true && !catModeEnabled) {
+      catModeEnabled = true;
+      flashStatus('😻 Auto-enabled!', 2000);
+    }
+  });
+  disposables.push(settingsChangeDisposable);
+
+  // Check if auto-enable is set
+  const autoEnable = api.settings.get<boolean>('autoEnable');
+  if (autoEnable) {
+    catModeEnabled = true;
+    statusBarItem.update({ text: '😻 CATS!', color: '#00ff00' });
+  }
+
+  // Apply saved status bar color
+  const savedColor = api.settings.get<string>('statusBarColor');
+  if (savedColor && !catModeEnabled) {
+    statusBarItem.update({ color: savedColor });
+  }
 
   api.log.info('Cat Image Replacer plugin activated! All features registered.');
 }

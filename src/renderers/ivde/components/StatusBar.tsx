@@ -12,6 +12,8 @@ interface PluginStatusBarItem {
   color?: string;
   priority?: number;
   alignment?: 'left' | 'right';
+  pluginName: string;
+  hasSettings: boolean;
 }
 
 export const StatusBar = () => {
@@ -68,9 +70,14 @@ export const StatusBar = () => {
                 style={{
                   margin: "0 5px",
                   color: item.color || "#999",
-                  cursor: "default",
+                  cursor: item.hasSettings ? "pointer" : "default",
                 }}
-                title={item.tooltip}
+                title={item.hasSettings ? `${item.tooltip || item.text} (click to configure)` : item.tooltip}
+                onClick={() => {
+                  if (item.hasSettings) {
+                    setState("settingsPane", { type: "plugin-settings", data: { pluginName: item.pluginName } });
+                  }
+                }}
               >
                 {item.text}
               </div>
@@ -87,9 +94,14 @@ export const StatusBar = () => {
                 style={{
                   margin: "0 5px",
                   color: item.color || "#999",
-                  cursor: "default",
+                  cursor: item.hasSettings ? "pointer" : "default",
                 }}
-                title={item.tooltip}
+                title={item.hasSettings ? `${item.tooltip || item.text} (click to configure)` : item.tooltip}
+                onClick={() => {
+                  if (item.hasSettings) {
+                    setState("settingsPane", { type: "plugin-settings", data: { pluginName: item.pluginName } });
+                  }
+                }}
               >
                 {item.text}
               </div>

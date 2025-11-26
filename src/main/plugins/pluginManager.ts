@@ -18,6 +18,8 @@ import type {
   MainToWorkerMessage,
   WorkerToMainMessage,
   PluginAPI,
+  PluginSettingsSchema,
+  PluginSettingsValues,
 } from './types';
 import { DEFAULT_PERMISSIONS } from './types';
 
@@ -109,6 +111,15 @@ interface RegisteredKeybinding {
   shortcut: KeyboardShortcut;
 }
 
+/** Settings change callback */
+type SettingsChangeCallback = (key: string, value: string | number | boolean) => void;
+
+/** Registered settings schema */
+interface RegisteredSettingsSchema {
+  pluginName: string;
+  schema: PluginSettingsSchema;
+}
+
 class PluginManager {
   private registry: PluginRegistry;
   private activeWorkers: Map<string, PluginWorkerState> = new Map();
@@ -121,9 +132,52 @@ class PluginManager {
   private decorationProviders: Map<string, RegisteredDecorationProvider> = new Map(); // provider id -> provider
   private contextMenuItems: Map<string, RegisteredContextMenuItem> = new Map(); // item id -> item
   private keybindings: Map<string, RegisteredKeybinding> = new Map(); // keybinding id -> keybinding
+  private settingsSchemas: Map<string, RegisteredSettingsSchema> = new Map(); // plugin name -> schema
+  private settingsValues: Map<string, PluginSettingsValues> = new Map(); // plugin name -> values
+  private settingsChangeCallbacks: Map<string, Set<SettingsChangeCallback>> = new Map(); // plugin name -> callbacks
 
   constructor() {
     this.registry = loadRegistry();
+    this.loadAllPluginSettings();
+  }
+
+  // ==========================================================================
+  // Settings Persistence
+  // ==========================================================================
+
+  private getSettingsFilePath(pluginName: string): string {
+    return join(COLAB_PLUGINS_PATH, `${pluginName.replace(/\//g, '__')}.settings.json`);
+  }
+
+  private loadPluginSettings(pluginName: string): PluginSettingsValues {
+    const settingsPath = this.getSettingsFilePath(pluginName);
+    if (!existsSync(settingsPath)) {
+      return {};
+    }
+    try {
+      const data = readFileSync(settingsPath, 'utf-8');
+      return JSON.parse(data);
+    } catch (e) {
+      console.error(`Failed to load settings for plugin ${pluginName}:`, e);
+      return {};
+    }
+  }
+
+  private savePluginSettings(pluginName: string): void {
+    const values = this.settingsValues.get(pluginName) || {};
+    const settingsPath = this.getSettingsFilePath(pluginName);
+    try {
+      writeFileSync(settingsPath, JSON.stringify(values, null, 2));
+    } catch (e) {
+      console.error(`Failed to save settings for plugin ${pluginName}:`, e);
+    }
+  }
+
+  private loadAllPluginSettings(): void {
+    for (const pluginName of Object.keys(this.registry.plugins)) {
+      const values = this.loadPluginSettings(pluginName);
+      this.settingsValues.set(pluginName, values);
+    }
   }
 
   // ==========================================================================
@@ -678,6 +732,83 @@ class PluginManager {
           };
         },
       },
+
+      settings: {
+        registerSchema(schema: PluginSettingsSchema) {
+          self.settingsSchemas.set(pluginName, { pluginName, schema });
+          // Initialize settings values with defaults if not already set
+          const currentValues = self.settingsValues.get(pluginName) || {};
+          let hasChanges = false;
+          for (const field of schema.fields) {
+            if (!(field.key in currentValues) && field.default !== undefined) {
+              currentValues[field.key] = field.default;
+              hasChanges = true;
+            }
+          }
+          if (hasChanges) {
+            self.settingsValues.set(pluginName, currentValues);
+            self.savePluginSettings(pluginName);
+          }
+          console.info(`[PluginManager] Plugin ${pluginName} registered settings schema with ${schema.fields.length} fields`);
+
+          return {
+            dispose() {
+              self.settingsSchemas.delete(pluginName);
+            },
+          };
+        },
+        get<T extends string | number | boolean>(key: string): T | undefined {
+          const values = self.settingsValues.get(pluginName) || {};
+          if (key in values) {
+            return values[key] as T;
+          }
+          // Check for default value in schema
+          const schema = self.settingsSchemas.get(pluginName);
+          if (schema) {
+            const field = schema.schema.fields.find(f => f.key === key);
+            if (field?.default !== undefined) {
+              return field.default as T;
+            }
+          }
+          return undefined;
+        },
+        set(key: string, value: string | number | boolean) {
+          const values = self.settingsValues.get(pluginName) || {};
+          const oldValue = values[key];
+          values[key] = value;
+          self.settingsValues.set(pluginName, values);
+          self.savePluginSettings(pluginName);
+
+          // Notify callbacks if value changed
+          if (oldValue !== value) {
+            const callbacks = self.settingsChangeCallbacks.get(pluginName);
+            if (callbacks) {
+              for (const callback of callbacks) {
+                try {
+                  callback(key, value);
+                } catch (e) {
+                  console.error(`[PluginManager] Error in settings change callback for ${pluginName}:`, e);
+                }
+              }
+            }
+          }
+        },
+        getAll(): PluginSettingsValues {
+          return { ...(self.settingsValues.get(pluginName) || {}) };
+        },
+        onChange(callback: SettingsChangeCallback) {
+          if (!self.settingsChangeCallbacks.has(pluginName)) {
+            self.settingsChangeCallbacks.set(pluginName, new Set());
+          }
+          self.settingsChangeCallbacks.get(pluginName)!.add(callback);
+
+          return {
+            dispose() {
+              self.settingsChangeCallbacks.get(pluginName)?.delete(callback);
+            },
+          };
+        },
+      },
     } as PluginAPI;
   }
 
@@ -1172,8 +1303,12 @@ class PluginManager {
   /**
    * Get all status bar items from plugins
    */
-  getStatusBarItems(): StatusBarItem[] {
-    return Array.from(this.statusBarItems.values()).map(r => r.item);
+  getStatusBarItems(): Array<StatusBarItem & { pluginName: string; hasSettings: boolean }> {
+    return Array.from(this.statusBarItems.values()).map(r => ({
+      ...r.item,
+      pluginName: r.pluginName,
+      hasSettings: this.settingsSchemas.has(r.pluginName),
+    }));
   }
 
   // ==========================================================================
@@ -1246,6 +1381,73 @@ class PluginManager {
    */
   getKeybindings(): KeyboardShortcut[] {
     return Array.from(this.keybindings.values()).map(r => r.shortcut);
+  }
+
+  // ==========================================================================
+  // Plugin Settings (for renderer)
+  // ==========================================================================
+
+  /**
+   * Get all plugins that have registered settings schemas
+   */
+  getPluginsWithSettings(): Array<{ pluginName: string; displayName?: string; schema: PluginSettingsSchema }> {
+    const result: Array<{ pluginName: string; displayName?: string; schema: PluginSettingsSchema }> = [];
+    for (const [pluginName, registered] of this.settingsSchemas) {
+      const plugin = this.registry.plugins[pluginName];
+      result.push({
+        pluginName,
+        displayName: plugin?.manifest.displayName,
+        schema: registered.schema,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Get settings schema for a specific plugin
+   */
+  getPluginSettingsSchema(pluginName: string): PluginSettingsSchema | null {
+    return this.settingsSchemas.get(pluginName)?.schema || null;
+  }
+
+  /**
+   * Get current settings values for a plugin
+   */
+  getPluginSettingsValues(pluginName: string): PluginSettingsValues {
+    return { ...(this.settingsValues.get(pluginName) || {}) };
+  }
+
+  /**
+   * Update a setting value from the renderer
+   * This is called from the settings panel
+   */
+  setPluginSettingValue(pluginName: string, key: string, value: string | number | boolean): void {
+    const values = this.settingsValues.get(pluginName) || {};
+    const oldValue = values[key];
+    values[key] = value;
+    this.settingsValues.set(pluginName, values);
+    this.savePluginSettings(pluginName);
+
+    // Notify callbacks if value changed
+    if (oldValue !== value) {
+      const callbacks = this.settingsChangeCallbacks.get(pluginName);
+      if (callbacks) {
+        for (const callback of callbacks) {
+          try {
+            callback(key, value);
+          } catch (e) {
+            console.error(`[PluginManager] Error in settings change callback for ${pluginName}:`, e);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Check if a plugin has a settings schema registered
+   */
+  hasPluginSettings(pluginName: string): boolean {
+    return this.settingsSchemas.has(pluginName);
   }
 
   // ==========================================================================

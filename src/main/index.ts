@@ -2045,6 +2045,22 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
         pluginGetKeybindings: () => {
           return pluginManager.getKeybindings();
         },
+        pluginGetSettingsSchemas: () => {
+          return pluginManager.getPluginsWithSettings();
+        },
+        pluginGetSettingsSchema: ({ pluginName }) => {
+          return pluginManager.getPluginSettingsSchema(pluginName);
+        },
+        pluginGetSettingsValues: ({ pluginName }) => {
+          return pluginManager.getPluginSettingsValues(pluginName);
+        },
+        pluginSetSettingValue: ({ pluginName, key, value }) => {
+          pluginManager.setPluginSettingValue(pluginName, key, value);
+          return { ok: true };
+        },
+        pluginHasSettings: ({ pluginName }) => {
+          return pluginManager.hasPluginSettings(pluginName);
+        },
       },
 
       messages: {

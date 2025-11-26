@@ -339,6 +339,37 @@ export interface PluginAPI {
      */
     register(shortcut: KeyboardShortcut): Disposable;
   };
+
+  /** Plugin settings */
+  settings: {
+    /**
+     * Register a settings schema for this plugin.
+     * This creates a settings panel accessible from the status bar or extensions menu.
+     * @param schema - The settings schema definition
+     */
+    registerSchema(schema: PluginSettingsSchema): Disposable;
+    /**
+     * Get a setting value
+     * @param key - Setting key
+     * @returns The current value, or the default if not set
+     */
+    get<T extends string | number | boolean>(key: string): T | undefined;
+    /**
+     * Set a setting value
+     * @param key - Setting key
+     * @param value - New value
+     */
+    set(key: string, value: string | number | boolean): void;
+    /**
+     * Get all settings for this plugin
+     */
+    getAll(): PluginSettingsValues;
+    /**
+     * Subscribe to settings changes
+     * @param callback - Called when any setting changes
+     */
+    onChange(callback: (key: string, value: string | number | boolean) => void): Disposable;
+  };
 }
 
 /** Handle to update or dispose a status bar item */
@@ -479,6 +510,45 @@ export interface KeyboardShortcut {
   /** Optional context where this shortcut is active: 'editor', 'terminal', 'global'. Default: 'global' */
   when?: 'editor' | 'terminal' | 'global';
 }
+
+// ============================================================================
+// Plugin Settings Types
+// ============================================================================
+
+/** A single setting field definition */
+export interface PluginSettingField {
+  /** Unique key for this setting */
+  key: string;
+  /** Display label */
+  label: string;
+  /** Field type */
+  type: 'string' | 'number' | 'boolean' | 'select' | 'color';
+  /** Default value */
+  default?: string | number | boolean;
+  /** Description/help text */
+  description?: string;
+  /** For 'select' type: available options */
+  options?: Array<{ label: string; value: string | number }>;
+  /** For 'number' type: min value */
+  min?: number;
+  /** For 'number' type: max value */
+  max?: number;
+  /** For 'number' type: step value */
+  step?: number;
+}
+
+/** Plugin settings schema for the settings panel */
+export interface PluginSettingsSchema {
+  /** Section title (displayed in settings panel) */
+  title?: string;
+  /** Section description */
+  description?: string;
+  /** Setting fields */
+  fields: PluginSettingField[];
+}
+
+/** Stored settings values for a plugin */
+export type PluginSettingsValues = Record<string, string | number | boolean>
 
 // ============================================================================
 // npm Registry Types

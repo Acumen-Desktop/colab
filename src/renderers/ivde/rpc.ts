@@ -798,6 +798,8 @@ export type WorkspaceRPC = {
           color?: string;
           priority?: number;
           alignment?: 'left' | 'right';
+          pluginName: string;
+          hasSettings: boolean;
         }>;
       };
       pluginGetFileDecoration: {
@@ -833,6 +835,58 @@ export type WorkspaceRPC = {
           command: string;
           when?: 'editor' | 'terminal' | 'global';
         }>;
+      };
+      pluginGetSettingsSchemas: {
+        params: void;
+        response: Array<{
+          pluginName: string;
+          displayName?: string;
+          schema: {
+            title?: string;
+            description?: string;
+            fields: Array<{
+              key: string;
+              label: string;
+              type: 'string' | 'number' | 'boolean' | 'select' | 'color';
+              default?: string | number | boolean;
+              description?: string;
+              options?: Array<{ label: string; value: string | number }>;
+              min?: number;
+              max?: number;
+              step?: number;
+            }>;
+          };
+        }>;
+      };
+      pluginGetSettingsSchema: {
+        params: { pluginName: string };
+        response: {
+          title?: string;
+          description?: string;
+          fields: Array<{
+            key: string;
+            label: string;
+            type: 'string' | 'number' | 'boolean' | 'select' | 'color';
+            default?: string | number | boolean;
+            description?: string;
+            options?: Array<{ label: string; value: string | number }>;
+            min?: number;
+            max?: number;
+            step?: number;
+          }>;
+        } | null;
+      };
+      pluginGetSettingsValues: {
+        params: { pluginName: string };
+        response: Record<string, string | number | boolean>;
+      };
+      pluginSetSettingValue: {
+        params: { pluginName: string; key: string; value: string | number | boolean };
+        response: { ok: boolean };
+      };
+      pluginHasSettings: {
+        params: { pluginName: string };
+        response: boolean;
       };
     };
     messages: {
