@@ -46,10 +46,22 @@ const colabPreloadScript = `
   // (e.g., raw JS/text files served without HTML)
   document.documentElement.style.backgroundColor = '#fff';
 
-  // Forward Ctrl+Tab and Ctrl+Shift+Tab to the host so tab cycling works
+  // Forward certain keyboard shortcuts to the host so they work
   // even when the webview OOPIF has focus
   document.addEventListener('keydown', function(e) {
+    var shouldForward = false;
+
+    // Ctrl+Tab / Ctrl+Shift+Tab - tab cycling
     if (e.key === 'Tab' && e.ctrlKey) {
+      shouldForward = true;
+    }
+    // Cmd+W - close tab (prevent it from closing the whole window)
+    // Cmd+Shift+W - close window
+    if (e.key === 'w' && e.metaKey) {
+      shouldForward = true;
+    }
+
+    if (shouldForward) {
       e.preventDefault();
       if (typeof window.__electrobunSendToHost === 'function') {
         window.__electrobunSendToHost({

@@ -49,6 +49,9 @@ import {
   broadcastToAllWindows,
   broadcastToAllWindowsInWorkspace,
   broadcastToWindow,
+  sendToFocusedWindow,
+  setFocusedWindow,
+  clearFocusedWindow,
   workspaceWindows,
 } from "./workspaceWindows";
 
@@ -560,22 +563,22 @@ ApplicationMenu.on("application-menu-clicked", (e) => {
   } else if (action === "acknowledgements") {
     createAboutWindow("views://assets/licenses.html");
   } else if (action === "open-command-palette") {
-    // Broadcast to all windows so the frontend can handle it
-    broadcastToAllWindows("openCommandPalette", {});
+    // Send to focused window only (not all windows)
+    sendToFocusedWindow("openCommandPalette", {});
   } else if (action === "new-browser-tab") {
-    broadcastToAllWindows("newBrowserTab", {});
+    sendToFocusedWindow("newBrowserTab", {});
   } else if (action === "llama-settings") {
-    broadcastToAllWindows("openSettings", { settingsType: "llama-settings" });
+    sendToFocusedWindow("openSettings", { settingsType: "llama-settings" });
   } else if (action === "colab-settings") {
-    broadcastToAllWindows("openSettings", { settingsType: "global-settings" });
+    sendToFocusedWindow("openSettings", { settingsType: "global-settings" });
   } else if (action === "workspace-settings") {
-    broadcastToAllWindows("openSettings", { settingsType: "workspace-settings" });
+    sendToFocusedWindow("openSettings", { settingsType: "workspace-settings" });
   } else if (action.startsWith("global-shortcut:")) {
     // Handle global shortcuts that need to work when webview has focus
     const accelerator = action.replace("global-shortcut:", "");
     const shortcut = builtInShortcuts.find(s => s.accelerator === accelerator);
     if (shortcut) {
-      broadcastToAllWindows("handleGlobalShortcut", {
+      sendToFocusedWindow("handleGlobalShortcut", {
         key: shortcut.key,
         ctrl: shortcut.ctrl,
         shift: shortcut.shift,
@@ -587,7 +590,7 @@ ApplicationMenu.on("application-menu-clicked", (e) => {
     // Handle plugin shortcuts
     const keyStr = action.replace("plugin-shortcut:", "");
     const parsed = parseKeyStringForMenu(keyStr);
-    broadcastToAllWindows("handleGlobalShortcut", {
+    sendToFocusedWindow("handleGlobalShortcut", {
       key: parsed.key,
       ctrl: parsed.ctrl,
       shift: parsed.shift,
@@ -1001,6 +1004,8 @@ const createWindow = (workspaceId: string, window?: WindowConfigType, offset?: {
     handlers: {
       requests: {
         getInitialState: () => {
+          // Set this window as focused when it requests initial state
+          setFocusedWindow(workspaceId, windowId);
           console.log("getInitialState - calling fetchProjects...");
           const data = fetchProjects() || {};
           console.log("getInitialState - received data:", data);
@@ -2446,6 +2451,12 @@ const createWindow = (workspaceId: string, window?: WindowConfigType, offset?: {
       console.log('---->:: 3 main window will navigate')
       e.response = { allow: false };
     });
+  });
+
+  // Track window focus using native macOS event
+  mainWindow.on("focus", () => {
+    console.log(`[main] Window ${windowId} received native focus event`);
+    setFocusedWindow(workspaceId, windowId);
   });
 
   // Set up terminal manager message handler for this window
