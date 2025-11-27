@@ -918,7 +918,9 @@ export type WorkspaceRPC = {
       formatFile: {
         path: string;
       };
-      createWindow: void;
+      createWindow: {
+        offset?: { x: number; y: number };
+      } | void;
       closeWindow: void;
       createWorkspace: void;
       updateWorkspace: {

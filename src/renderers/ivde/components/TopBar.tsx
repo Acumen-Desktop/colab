@@ -87,7 +87,41 @@ export const TopBar = () => {
             getWindow()?.ui.showSidebar ? "-filled" : ""
           }.svg`}
         />
-      </div>      
+      </div>
+
+      {/* New Window button */}
+      <div
+        title="New Window"
+        style={{
+          width: "24px",
+          height: "24px",
+          "border-radius": "4px",
+          "text-align": "center",
+          "vertical-align": "middle",
+          "line-height": "24px",
+          "margin-top": "7px",
+          cursor: "pointer",
+          "-webkit-user-select": "none",
+          border: "1px solid #1f1f1f",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+        }}
+        onClick={() => {
+          const pos = getWindow()?.position;
+          const offset = {
+            x: (pos?.x || 0) + 75,
+            y: (pos?.y || 0) + 75,
+          };
+          electrobun.rpc?.send.createWindow({ offset });
+        }}
+      >
+        <img
+          width="16px"
+          height="16px"
+          src="views://assets/file-icons/new-window.svg"
+        />
+      </div>
 
       <div
         class="electrobun-webkit-app-region-drag"

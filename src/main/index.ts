@@ -728,7 +728,7 @@ const getWorkspaceForWindow = (windowId: number) => {
 }
 
 // If window is not provided then it will create a new window for the workspace
-const createWindow = (workspaceId: string, window?: WindowConfigType) => {
+const createWindow = (workspaceId: string, window?: WindowConfigType, offset?: { x: number; y: number }) => {
   // console.log("---> createWindow", window);
   if (!window) {
     const workspace = db.collection("workspaces").queryById(workspaceId).data;
@@ -738,6 +738,10 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
     }
 
     const existingWindows = workspace.windows || [];
+
+    // Calculate position with optional offset from current windows
+    const baseX = offset?.x || 0;
+    const baseY = offset?.y || 0;
 
     const updatedWorkspace = db.collection("workspaces").update(workspaceId, {
       // todo (yoav): [blocking] we absolutely must have typing for this structure here
@@ -750,8 +754,8 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
             sidebarWidth: 200,
           },
           position: {
-            x: 0,
-            y: 0,
+            x: baseX,
+            y: baseY,
             width: 1500,
             height: 900,
           },
@@ -2086,8 +2090,8 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
         formatFile: ({ path }) => {
           formatFile(path);
         },
-        createWindow: () => {
-          createWindow(workspaceId);
+        createWindow: ({ offset } = {}) => {
+          createWindow(workspaceId, undefined, offset);
         },
         closeWindow: () => {
           mainWindow.close();
