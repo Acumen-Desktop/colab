@@ -42,6 +42,10 @@ import { createBrowserProfileFolderName } from "../../utils/browserProfileUtils"
 // todo: implement cmd + click to open in new tab. needs more thought
 const colabPreloadScript = `
 (function() {
+  // Set a default background color for pages that don't specify one
+  // (e.g., raw JS/text files served without HTML)
+  document.documentElement.style.backgroundColor = '#fff';
+
   // Forward Ctrl+Tab and Ctrl+Shift+Tab to the host so tab cycling works
   // even when the webview OOPIF has focus
   document.addEventListener('keydown', function(e) {
