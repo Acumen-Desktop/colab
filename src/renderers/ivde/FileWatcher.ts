@@ -165,7 +165,7 @@ const extensionsToLanguages: {} = {
   tsx: "typescript",
   js: "javascript",
   html: "html",
-  md: "plaintext",
+  md: "markdown",
   css: "css",
   json: "json",
 };
