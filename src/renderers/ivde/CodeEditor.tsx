@@ -567,7 +567,7 @@ export const Editor = ({ currentTabId }: { currentTabId: string }) => {
         const model = ed.getModel();
         const value = model?.getValue();
 
-        if (!model || !value) {
+        if (!model || value == null) {
           return;
         }
         // save your file here
