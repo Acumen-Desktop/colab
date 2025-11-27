@@ -41,7 +41,25 @@ import { createBrowserProfileFolderName } from "../../utils/browserProfileUtils"
 
 // todo: implement cmd + click to open in new tab. needs more thought
 const colabPreloadScript = `
-
+(function() {
+  // Forward Ctrl+Tab and Ctrl+Shift+Tab to the host so tab cycling works
+  // even when the webview OOPIF has focus
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Tab' && e.ctrlKey) {
+      e.preventDefault();
+      if (typeof window.__electrobunSendToHost === 'function') {
+        window.__electrobunSendToHost({
+          type: 'colab:keydown',
+          key: e.key,
+          ctrlKey: e.ctrlKey,
+          shiftKey: e.shiftKey,
+          altKey: e.altKey,
+          metaKey: e.metaKey
+        });
+      }
+    }
+  });
+})();
 `;
 
 // Cache plugin preloads at module level (shared across all WebSlate instances)
@@ -905,6 +923,26 @@ console.log('Preload script loaded for:', window.location.href);
               });
             } catch (e) {
               console.log(e)
+            }
+          });
+
+          // Listen for keyboard shortcuts forwarded from webview preload scripts
+          // This allows Ctrl+Tab/Ctrl+Shift+Tab to work even when the webview OOPIF has focus
+          webviewRef.on("host-message", (e: any) => {
+            const msg = e.detail;
+            if (msg?.type === 'colab:keydown') {
+              // Dispatch a synthetic keyboard event to the document so it bubbles up
+              // to the global keydown handler in index.tsx
+              const syntheticEvent = new KeyboardEvent('keydown', {
+                key: msg.key,
+                ctrlKey: msg.ctrlKey,
+                shiftKey: msg.shiftKey,
+                altKey: msg.altKey,
+                metaKey: msg.metaKey,
+                bubbles: true,
+                cancelable: true,
+              });
+              document.dispatchEvent(syntheticEvent);
             }
           });
 
