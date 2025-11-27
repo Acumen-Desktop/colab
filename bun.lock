@@ -7,6 +7,7 @@
       "dependencies": {
         "@webflow/webflow-cli": "^1.1.1",
         "@xterm/addon-fit": "^0.10.0",
+        "@xterm/addon-search": "^0.15.0",
         "@xterm/addon-web-links": "^0.11.0",
         "@xterm/addon-webgl": "^0.18.0",
         "@xterm/xterm": "^5.5.0",
@@ -472,6 +473,8 @@
     "@webflow/webflow-cli": ["@webflow/webflow-cli@1.8.44", "", { "dependencies": { "@babel/preset-env": "^7.26.9", "@babel/preset-react": "^7.26.3", "@babel/preset-typescript": "^7.27.0", "@dotenvx/dotenvx": "^1.44.1", "@module-federation/enhanced": "0.18.3", "@webflow/data-types": "1.0.1", "ajv": "^8.17.1", "archiver": "^5.3.1", "babel-loader": "^10.0.0", "commander": "^10.0.0", "cosmiconfig": "^8.2.0", "css-loader": "^7.1.2", "css-tree": "^2.3.1", "dotenv": "^16.0.3", "env-paths": "^3.0.0", "fast-glob": "^3.3.3", "filenamify": "^6.0.0", "fork-ts-checker-webpack-plugin": "9.1.0", "form-data": "4.0.4", "fs-extra": "^11.3.0", "inquirer": "^9.1.4", "jsonc-parser": "^3.2.0", "md5": "^2.2.1", "memfs": "4.17.0", "mime-types": "^2.1.35", "mini-css-extract-plugin": "^2.9.2", "node-fetch": "^2.6.7", "open": "^8.4.2", "ora": "^8.2.0", "postcss": "^8.5.6", "postcss-loader": "^8.1.1", "postcss-selector-parser": "^7.1.0", "prettier": "^2.7.1", "semver": "^7.7.2", "serve-handler": "^6.1.5", "source-map-support": "^0.5.21", "tar": "^7.4.3", "unionfs": "^4.5.4", "webflow-api": "3.2.0", "webpack": "^5.99.7", "webpack-merge": "^6.0.1", "webpack-node-externals": "^3.0.0", "zod": "^3.22.4" }, "bin": { "webflow": "dist/index.js" } }, "sha512-pK5k6dRB/ZPETmaWaid3MBDoeF8okQCmK/jJtD0jjTfoSUnfgoWEsZZQ8iAntwwjZCvuazficSp26X0Ysg3Elg=="],
 
     "@xterm/addon-fit": ["@xterm/addon-fit@0.10.0", "", { "peerDependencies": { "@xterm/xterm": "^5.0.0" } }, "sha512-UFYkDm4HUahf2lnEyHvio51TNGiLK66mqP2JoATy7hRZeXaGMRDr00JiSF7m63vR5WKATF605yEggJKsw0JpMQ=="],
+
+    "@xterm/addon-search": ["@xterm/addon-search@0.15.0", "", { "peerDependencies": { "@xterm/xterm": "^5.0.0" } }, "sha512-ZBZKLQ+EuKE83CqCmSSz5y1tx+aNOCUaA7dm6emgOX+8J9H1FWXZyrKfzjwzV+V14TV3xToz1goIeRhXBS5qjg=="],
 
     "@xterm/addon-web-links": ["@xterm/addon-web-links@0.11.0", "", { "peerDependencies": { "@xterm/xterm": "^5.0.0" } }, "sha512-nIHQ38pQI+a5kXnRaTgwqSHnX7KE6+4SVoceompgHL26unAxdfP6IPqUTSYPQgSwM56hsElfoNrrW5V7BUED/Q=="],
 

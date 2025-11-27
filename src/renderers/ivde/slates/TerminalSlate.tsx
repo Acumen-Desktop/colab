@@ -1,10 +1,11 @@
-import { createSignal, onMount, onCleanup } from "solid-js";
+import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import { produce } from "solid-js/store";
 import { type TerminalTabType, getWindow, setState, openNewTabForNode } from "../store";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { SearchAddon } from "@xterm/addon-search";
 import { electrobun } from "../init";
 
 export const TerminalSlate = ({ tabId }: { tabId: string }) => {
@@ -13,10 +14,14 @@ export const TerminalSlate = ({ tabId }: { tabId: string }) => {
   const [currentDir, setCurrentDir] = createSignal<string | null>(null);
   
   let terminalElement: HTMLDivElement | undefined;
+  let searchInputRef: HTMLInputElement | undefined;
   let terminal: Terminal | null = null;
   let fitAddon: FitAddon | null = null;
   let webglAddon: WebglAddon | null = null;
+  let searchAddon: SearchAddon | null = null;
   let cwdUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
+  const [showSearch, setShowSearch] = createSignal(false);
+  const [searchQuery, setSearchQuery] = createSignal("");
 
   // Function to update current directory from the terminal process (debounced)
   const updateCurrentDir = async () => {
@@ -102,7 +107,11 @@ export const TerminalSlate = ({ tabId }: { tabId: string }) => {
         openNewTabForNode('__COLAB_INTERNAL__/web', false, { focusNewTab: true, url: uri });
       });
       terminal.loadAddon(webLinksAddon);
-      
+
+      // Add search addon
+      searchAddon = new SearchAddon();
+      terminal.loadAddon(searchAddon);
+
       terminal.open(terminalElement);
       fitAddon.fit();
 
@@ -138,6 +147,35 @@ export const TerminalSlate = ({ tabId }: { tabId: string }) => {
               terminalId: terminalId()!,
               data: '\x0c', // Form feed character (clear screen)
             });
+          }
+          return false;
+        }
+
+        // Cmd+F: Open search
+        if (event.key === 'f' && event.metaKey && !event.shiftKey && !event.ctrlKey) {
+          event.preventDefault();
+          setShowSearch(true);
+          setTimeout(() => searchInputRef?.focus(), 0);
+          return false;
+        }
+
+        // Escape: Close search
+        if (event.key === 'Escape' && showSearch()) {
+          event.preventDefault();
+          setShowSearch(false);
+          setSearchQuery("");
+          searchAddon?.clearDecorations();
+          terminal?.focus();
+          return false;
+        }
+
+        // Cmd+G: Find next, Cmd+Shift+G: Find previous
+        if (event.key === 'g' && event.metaKey && showSearch() && searchQuery()) {
+          event.preventDefault();
+          if (event.shiftKey) {
+            searchAddon?.findPrevious(searchQuery(), { caseSensitive: false, regex: false });
+          } else {
+            searchAddon?.findNext(searchQuery(), { caseSensitive: false, regex: false });
           }
           return false;
         }
@@ -240,6 +278,31 @@ export const TerminalSlate = ({ tabId }: { tabId: string }) => {
     });
   });
 
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    if (query && searchAddon) {
+      searchAddon.findNext(query, { caseSensitive: false, regex: false });
+    } else {
+      searchAddon?.clearDecorations();
+    }
+  };
+
+  const handleSearchKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' || (e.key === 'g' && e.metaKey)) {
+      e.preventDefault();
+      if (e.shiftKey) {
+        searchAddon?.findPrevious(searchQuery(), { caseSensitive: false, regex: false });
+      } else {
+        searchAddon?.findNext(searchQuery(), { caseSensitive: false, regex: false });
+      }
+    } else if (e.key === 'Escape') {
+      setShowSearch(false);
+      setSearchQuery("");
+      searchAddon?.clearDecorations();
+      terminal?.focus();
+    }
+  };
+
   return (
     <div
       style={{
@@ -247,8 +310,85 @@ export const TerminalSlate = ({ tabId }: { tabId: string }) => {
         height: "100%",
         padding: "8px",
         "background-color": "#000005",
+        position: "relative",
       }}
     >
+      <Show when={showSearch()}>
+        <div
+          style={{
+            position: "absolute",
+            top: "8px",
+            right: "16px",
+            "z-index": "100",
+            display: "flex",
+            gap: "4px",
+            "align-items": "center",
+          }}
+        >
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search..."
+            value={searchQuery()}
+            onInput={(e) => handleSearch(e.currentTarget.value)}
+            onKeyDown={handleSearchKeyDown}
+            style={{
+              padding: "4px 8px",
+              "border-radius": "4px",
+              border: "1px solid #444",
+              "background-color": "#1e1e1e",
+              color: "#fff",
+              "font-size": "13px",
+              width: "200px",
+              outline: "none",
+            }}
+          />
+          <button
+            onClick={() => searchAddon?.findPrevious(searchQuery(), { caseSensitive: false, regex: false })}
+            style={{
+              padding: "4px 8px",
+              "border-radius": "4px",
+              border: "1px solid #444",
+              "background-color": "#2d2d2d",
+              color: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            ↑
+          </button>
+          <button
+            onClick={() => searchAddon?.findNext(searchQuery(), { caseSensitive: false, regex: false })}
+            style={{
+              padding: "4px 8px",
+              "border-radius": "4px",
+              border: "1px solid #444",
+              "background-color": "#2d2d2d",
+              color: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            ↓
+          </button>
+          <button
+            onClick={() => {
+              setShowSearch(false);
+              setSearchQuery("");
+              searchAddon?.clearDecorations();
+              terminal?.focus();
+            }}
+            style={{
+              padding: "4px 8px",
+              "border-radius": "4px",
+              border: "1px solid #444",
+              "background-color": "#2d2d2d",
+              color: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      </Show>
       <div
         ref={terminalElement}
         style={{
