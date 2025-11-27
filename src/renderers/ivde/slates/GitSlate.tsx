@@ -110,14 +110,9 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
       clearTimeout(refreshLogAndStageTimeout);
       refreshLogAndStageTimeout = setTimeout(() => {
         getLogAndStatus();
-        const _selectedFile = selectedFile();
-        setSelectedFile({
-          commitHash: "",
-          relPath: "",
-          changeType: "",
-        });
-
-        setSelectedFile(_selectedFile);
+        // Note: We no longer clear/reset selectedFile here to avoid remounting
+        // the DiffEditor component. The diff content comparison in setUiState
+        // will prevent unnecessary re-renders.
       }, 100);
       // getLogAndStage();
     }
@@ -321,11 +316,15 @@ export const GitSlate = ({ node }: { node?: CachedFileType }) => {
           isStaged
         );
 
-        // Ensure we always have valid strings
-        setUiState({
-          originalText: originalText || "",
-          modifiedText: modifiedText || "",
-        });
+        // Only update if content actually changed to avoid unnecessary re-renders
+        const newOriginal = originalText || "";
+        const newModified = modifiedText || "";
+        if (uiState.originalText !== newOriginal || uiState.modifiedText !== newModified) {
+          setUiState({
+            originalText: newOriginal,
+            modifiedText: newModified,
+          });
+        }
       } catch (error) {
         console.error('Error loading diff:', error);
         setUiState({

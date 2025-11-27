@@ -545,9 +545,34 @@ export const DiffEditor = ({
   
   createEffect(() => {
     if (originalModel && modifiedModel && editor) {
+      const newOriginal = originalText();
+      const newModified = modifiedText();
+
+      // Skip re-render if contents haven't changed
+      const oldOriginal = originalModel.getValue();
+      const oldModified = modifiedModel.getValue();
+
+      const originalChanged = newOriginal !== oldOriginal;
+      const modifiedChanged = newModified !== oldModified;
+
+      console.log('[DiffEditor] Content check:', {
+        originalChanged,
+        modifiedChanged,
+        oldOriginalLen: oldOriginal.length,
+        newOriginalLen: newOriginal.length,
+        oldModifiedLen: oldModified.length,
+        newModifiedLen: newModified.length,
+      });
+
+      if (!originalChanged && !modifiedChanged) {
+        console.log('[DiffEditor] Skipping re-render - contents unchanged');
+        return;
+      }
+
+      console.log('[DiffEditor] Re-rendering diff');
       editor.revealLine(1);
-      originalModel.setValue(originalText());
-      modifiedModel.setValue(modifiedText());
+      originalModel.setValue(newOriginal);
+      modifiedModel.setValue(newModified);
 
       const newLanguage = "typescript";
       monaco.editor.setModelLanguage(originalModel, newLanguage);
