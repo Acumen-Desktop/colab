@@ -299,97 +299,256 @@ function deleteProject(workspaceId: string, projectId: string) {
   });
 }
 
-ApplicationMenu.setApplicationMenu([
-  // other menu items...
-  {
-    label: "co(lab)",
-    submenu: [{ role: "quit", accelerator: "q" }],
-  },
-  {
-    label: "Edit",
-    submenu: [
-      { role: "undo" },
-      { role: "redo" },
-      { type: "separator" },
-      { role: "cut" },
-      { role: "copy" },
-      { role: "paste" },
-      { role: "pasteAndMatchStyle" },
-      { role: "delete" },
-      { role: "selectAll" },
-    ],
-  },
-  // {
-  //   label: "View",
-  //   submenu: [
-  // todo: we can't trigger dev tools programmatically in webkit
-  // {
-  //   label: 'Toggle Developer Tools',
-  //   accelerator: process.platform === 'darwin' ? 'Alt+Command+I' : 'Ctrl+Shift+I',
-  //   click: () => {
-  //     const focusedWindow = BrowserWindow.getFocusedWindow();
-  //     if (focusedWindow) {
-  //       focusedWindow.webContents.toggleDevTools();
-  //     }
-  //   }
-  // }
-  //   ],
-  // },
-  {
-    label: "Tools",
-    submenu: [
-      {
-        type: "normal",
-        label: "Open Command Palette",
-        action: "open-command-palette",
-        accelerator: "p",
-      },
-    ],
-  },
-  {
-    label: "Settings",
-    submenu: [
-      {
-        type: "normal",
-        label: "Llama Settings",
-        action: "llama-settings",
-      },
-      {
-        type: "normal",
-        label: "Colab Settings",
-        action: "colab-settings",
-      },
-      {
-        type: "normal",
-        label: "Workspace Settings",
-        action: "workspace-settings",
-      },
-    ],
-  },
-  {
-    role: "help",
-    // type: 'normal',
-    label: "Help",
-    submenu: [
-      {
-        type: "normal",
-        label: "Terms of Service",
-        action: "terms-of-service",
-      },
-      {
-        type: "normal",
-        label: "Privacy Statement",
-        action: "privacy-statement",
-      },
-      {
-        type: "normal",
-        label: "Acknowledgements",
-        action: "acknowledgements",
-      },
-      //   // other help items...
-    ],
-  },
-]);
+// Built-in global shortcuts that should work even when webview has focus
+// These map accelerator strings to their key components for broadcasting
+const builtInShortcuts: Array<{
+  accelerator: string;
+  key: string;
+  ctrl: boolean;
+  shift: boolean;
+  alt: boolean;
+  meta: boolean;
+  action?: string; // Optional action for menu items that have custom handling
+}> = [
+  // Cmd+T - new browser tab
+  { accelerator: "t", key: "t", ctrl: false, shift: false, alt: false, meta: true, action: "new-browser-tab" },
+  // Cmd+P - open command palette (file search)
+  { accelerator: "p", key: "p", ctrl: false, shift: false, alt: false, meta: true, action: "open-command-palette" },
+  // Cmd+Shift+P - open command palette (commands)
+  { accelerator: "shift+p", key: "p", ctrl: false, shift: true, alt: false, meta: true },
+  // Cmd+Shift+F - find all in folder
+  { accelerator: "shift+f", key: "f", ctrl: false, shift: true, alt: false, meta: true },
+  // Cmd+W - close tab
+  { accelerator: "w", key: "w", ctrl: false, shift: false, alt: false, meta: true },
+  // Cmd+Shift+W - close window
+  { accelerator: "shift+w", key: "w", ctrl: false, shift: true, alt: false, meta: true },
+  // Ctrl+Tab - next tab
+  { accelerator: "ctrl+tab", key: "Tab", ctrl: true, shift: false, alt: false, meta: false },
+  // Ctrl+Shift+Tab - previous tab
+  { accelerator: "ctrl+shift+tab", key: "Tab", ctrl: true, shift: true, alt: false, meta: false },
+];
+
+// Track registered plugin shortcuts to avoid duplicates
+let registeredPluginShortcuts: Set<string> = new Set();
+
+// Convert plugin key format to Electrobun accelerator format
+// Plugin format: "ctrl+shift+m" or "cmd+p"
+// Electrobun format: "ctrl+shift+m" or just "p" (Cmd is implicit for letters)
+function convertToAccelerator(keyStr: string): string {
+  const parts = keyStr.toLowerCase().split('+');
+  const key = parts[parts.length - 1];
+  const hasCmd = parts.includes('cmd') || parts.includes('meta');
+  const hasCtrl = parts.includes('ctrl');
+  const hasShift = parts.includes('shift');
+  const hasAlt = parts.includes('alt');
+
+  // Build accelerator string
+  const modifiers: string[] = [];
+  if (hasCtrl) modifiers.push('ctrl');
+  if (hasAlt) modifiers.push('alt');
+  if (hasShift) modifiers.push('shift');
+  // Note: For Electrobun on macOS, Cmd is implicit for menu accelerators,
+  // so we don't include it. But if ctrl is specified, we keep it.
+
+  if (modifiers.length > 0) {
+    return `${modifiers.join('+')}+${key}`;
+  }
+  return key;
+}
+
+// Function to update the application menu with current shortcuts
+function updateApplicationMenu() {
+  // Build plugin shortcuts menu items (visible so accelerators register)
+  const pluginShortcutItems = Array.from(registeredPluginShortcuts).map((keyStr) => {
+    const accelerator = convertToAccelerator(keyStr);
+    console.log(`Plugin shortcut: ${keyStr} -> accelerator: ${accelerator}`);
+    return {
+      type: "normal" as const,
+      label: `Plugin: ${keyStr}`,
+      action: `plugin-shortcut:${keyStr}`,
+      accelerator: accelerator,
+    };
+  });
+
+  ApplicationMenu.setApplicationMenu([
+    {
+      label: "co(lab)",
+      submenu: [{ role: "quit", accelerator: "q" }],
+    },
+    {
+      label: "File",
+      submenu: [
+        {
+          type: "normal",
+          label: "New Browser Tab",
+          action: "new-browser-tab",
+          accelerator: "t",
+        },
+        {
+          type: "normal",
+          label: "Close Tab",
+          action: "global-shortcut:w",
+          accelerator: "w",
+        },
+        {
+          type: "normal",
+          label: "Close Window",
+          action: "global-shortcut:shift+w",
+          accelerator: "shift+w",
+        },
+      ],
+    },
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "pasteAndMatchStyle" },
+        { role: "delete" },
+        { role: "selectAll" },
+      ],
+    },
+    {
+      label: "View",
+      submenu: [
+        {
+          type: "normal",
+          label: "Next Tab",
+          action: "global-shortcut:ctrl+tab",
+          accelerator: "ctrl+tab",
+        },
+        {
+          type: "normal",
+          label: "Previous Tab",
+          action: "global-shortcut:ctrl+shift+tab",
+          accelerator: "ctrl+shift+tab",
+        },
+      ],
+    },
+    {
+      label: "Tools",
+      submenu: [
+        {
+          type: "normal",
+          label: "Command Palette",
+          action: "open-command-palette",
+          accelerator: "p",
+        },
+        {
+          type: "normal",
+          label: "Command Palette (Commands)",
+          action: "global-shortcut:shift+p",
+          accelerator: "shift+p",
+        },
+        {
+          type: "normal",
+          label: "Find in Files",
+          action: "global-shortcut:shift+f",
+          accelerator: "shift+f",
+        },
+        // Add plugin shortcuts here if any exist
+        ...(pluginShortcutItems.length > 0 ? [
+          { type: "separator" as const },
+          ...pluginShortcutItems,
+        ] : []),
+      ],
+    },
+    {
+      label: "Settings",
+      submenu: [
+        {
+          type: "normal",
+          label: "Llama Settings",
+          action: "llama-settings",
+        },
+        {
+          type: "normal",
+          label: "Colab Settings",
+          action: "colab-settings",
+        },
+        {
+          type: "normal",
+          label: "Workspace Settings",
+          action: "workspace-settings",
+        },
+      ],
+    },
+    {
+      role: "help",
+      label: "Help",
+      submenu: [
+        {
+          type: "normal",
+          label: "Terms of Service",
+          action: "terms-of-service",
+        },
+        {
+          type: "normal",
+          label: "Privacy Statement",
+          action: "privacy-statement",
+        },
+        {
+          type: "normal",
+          label: "Acknowledgements",
+          action: "acknowledgements",
+        },
+      ],
+    },
+  ]);
+}
+
+// Helper to parse key strings like "ctrl+shift+m" for menu accelerators
+function parseKeyStringForMenu(keyStr: string): { key: string; ctrl: boolean; shift: boolean; alt: boolean; meta: boolean } {
+  const parts = keyStr.toLowerCase().split('+');
+  const key = parts[parts.length - 1];
+  return {
+    key,
+    ctrl: parts.includes('ctrl'),
+    shift: parts.includes('shift'),
+    alt: parts.includes('alt'),
+    meta: parts.includes('meta') || parts.includes('cmd'),
+  };
+}
+
+// Function to sync plugin keybindings to the application menu
+async function syncPluginKeybindings() {
+  try {
+    const keybindings = pluginManager.getKeybindings();
+    const newShortcuts = new Set<string>();
+
+    for (const kb of keybindings) {
+      // Convert plugin key format to accelerator format
+      // Plugin format: "ctrl+shift+m" or "cmd+p"
+      // Accelerator format: same, but we need to track them
+      newShortcuts.add(kb.key);
+    }
+
+    // Only update menu if shortcuts changed
+    const hasChanges = newShortcuts.size !== registeredPluginShortcuts.size ||
+      [...newShortcuts].some(s => !registeredPluginShortcuts.has(s));
+
+    if (hasChanges) {
+      console.log('Plugin keybindings changed:', Array.from(newShortcuts));
+      registeredPluginShortcuts = newShortcuts;
+      updateApplicationMenu();
+    }
+  } catch (err) {
+    console.warn('Failed to sync plugin keybindings:', err);
+  }
+}
+
+// Initial menu setup
+updateApplicationMenu();
+
+// Sync plugin keybindings periodically (every 5 seconds)
+setInterval(syncPluginKeybindings, 5000);
+
+// Initial sync after plugins are loaded
+setTimeout(syncPluginKeybindings, 1000);
 
 ApplicationMenu.on("application-menu-clicked", (e) => {
   const { action } = e.data;
@@ -401,14 +560,40 @@ ApplicationMenu.on("application-menu-clicked", (e) => {
   } else if (action === "acknowledgements") {
     createAboutWindow("views://assets/licenses.html");
   } else if (action === "open-command-palette") {
-    // todo: track the active window
+    // Broadcast to all windows so the frontend can handle it
     broadcastToAllWindows("openCommandPalette", {});
+  } else if (action === "new-browser-tab") {
+    broadcastToAllWindows("newBrowserTab", {});
   } else if (action === "llama-settings") {
     broadcastToAllWindows("openSettings", { settingsType: "llama-settings" });
   } else if (action === "colab-settings") {
     broadcastToAllWindows("openSettings", { settingsType: "global-settings" });
   } else if (action === "workspace-settings") {
     broadcastToAllWindows("openSettings", { settingsType: "workspace-settings" });
+  } else if (action.startsWith("global-shortcut:")) {
+    // Handle global shortcuts that need to work when webview has focus
+    const accelerator = action.replace("global-shortcut:", "");
+    const shortcut = builtInShortcuts.find(s => s.accelerator === accelerator);
+    if (shortcut) {
+      broadcastToAllWindows("handleGlobalShortcut", {
+        key: shortcut.key,
+        ctrl: shortcut.ctrl,
+        shift: shortcut.shift,
+        alt: shortcut.alt,
+        meta: shortcut.meta,
+      });
+    }
+  } else if (action.startsWith("plugin-shortcut:")) {
+    // Handle plugin shortcuts
+    const keyStr = action.replace("plugin-shortcut:", "");
+    const parsed = parseKeyStringForMenu(keyStr);
+    broadcastToAllWindows("handleGlobalShortcut", {
+      key: parsed.key,
+      ctrl: parsed.ctrl,
+      shift: parsed.shift,
+      alt: parsed.alt,
+      meta: parsed.meta,
+    });
   }
 });
 

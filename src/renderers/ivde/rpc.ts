@@ -1044,8 +1044,16 @@ export type WorkspaceRPC = {
         results: string[];
       };
       openCommandPalette: void;
+      newBrowserTab: void;
       openSettings: {
         settingsType: string;
+      };
+      handleGlobalShortcut: {
+        key: string;
+        ctrl: boolean;
+        shift: boolean;
+        alt: boolean;
+        meta: boolean;
       };
       terminalOutput: {
         terminalId: string;

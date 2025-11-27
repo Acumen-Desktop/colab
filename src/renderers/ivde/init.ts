@@ -404,6 +404,24 @@ const rpc = Electroview.defineRPC<WorkspaceRPC>({
         });
         setState("ui", "showCommandPalette", !state.ui.showCommandPalette);
       },
+      newBrowserTab: () => {
+        openNewTabForNode("__COLAB_TEMPLATE__/browser-chromium", false, {
+          focusNewTab: true,
+        });
+      },
+      handleGlobalShortcut: ({ key, ctrl, shift, alt, meta }) => {
+        // Dispatch a synthetic keyboard event to trigger the existing shortcut handlers
+        const event = new KeyboardEvent('keydown', {
+          key,
+          ctrlKey: ctrl,
+          shiftKey: shift,
+          altKey: alt,
+          metaKey: meta,
+          bubbles: true,
+          cancelable: true,
+        });
+        document.dispatchEvent(event);
+      },
       openSettings: ({ settingsType }) => {
         setState("settingsPane", { type: settingsType, data: {} });
       },

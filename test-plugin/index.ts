@@ -198,7 +198,7 @@ export async function activate(api: PluginAPI): Promise<void> {
 
   // Register keyboard shortcut
   const keybindingDisposable = api.keybindings.register({
-    key: 'ctrl+shift+m',
+    key: 'cmd+shift+m',
     command: 'catReplacer.enable',
     when: 'global',
   });
