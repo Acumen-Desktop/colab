@@ -16,8 +16,9 @@ export const TerminalSlate = ({ tabId }: { tabId: string }) => {
   let terminal: Terminal | null = null;
   let fitAddon: FitAddon | null = null;
   let webglAddon: WebglAddon | null = null;
+  let cwdUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  // Function to update current directory from the terminal process
+  // Function to update current directory from the terminal process (debounced)
   const updateCurrentDir = async () => {
     const id = terminalId();
     if (!id) {
@@ -152,6 +153,14 @@ export const TerminalSlate = ({ tabId }: { tabId: string }) => {
             terminalId: terminalId()!,
             data,
           });
+
+          // Check for cwd change after user presses Enter (debounced)
+          if (data === '\r' || data === '\n') {
+            if (cwdUpdateTimeout) {
+              clearTimeout(cwdUpdateTimeout);
+            }
+            cwdUpdateTimeout = setTimeout(updateCurrentDir, 500);
+          }
         }
       });
 
@@ -195,12 +204,6 @@ export const TerminalSlate = ({ tabId }: { tabId: string }) => {
       const data = event.detail;
       if (data.terminalId === terminalId() && terminal) {
         terminal.write(data.data);
-        
-        // If the output contains a newline (indicating a command was executed),
-        // check for directory changes after a short delay
-        if (data.data.includes('\n') || data.data.includes('\r')) {
-          setTimeout(updateCurrentDir, 500); // Small delay to let command complete
-        }
       }
     };
 
@@ -219,7 +222,12 @@ export const TerminalSlate = ({ tabId }: { tabId: string }) => {
       // Remove event listeners
       window.removeEventListener('terminalOutput', handleTerminalOutput as EventListener);
       window.removeEventListener('terminalExit', handleTerminalExit as EventListener);
-      
+
+      // Clear pending cwd update
+      if (cwdUpdateTimeout) {
+        clearTimeout(cwdUpdateTimeout);
+      }
+
       // Clean up terminal resources
       if (terminalId()) {
         electrobun.rpc?.request.killTerminal({
