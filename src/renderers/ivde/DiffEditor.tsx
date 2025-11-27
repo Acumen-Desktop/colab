@@ -414,6 +414,10 @@ export const DiffEditor = ({
   };
 
   onCleanup(() => {
+    // Detach models from editor before disposing them
+    if (editor) {
+      editor.setModel(null);
+    }
     if (originalModel) originalModel.dispose();
     if (modifiedModel) modifiedModel.dispose();
     if (editor) editor.dispose();
