@@ -173,8 +173,13 @@ export const TerminalSlate = ({ tabId }: { tabId: string }) => {
       });
 
       // Handle container resize
-      const resizeObserver = new ResizeObserver(() => {
-        fitAddon?.fit();
+      const resizeObserver = new ResizeObserver((entries) => {
+        // Only call fit() if the element has valid dimensions
+        // This prevents resizing to tiny dimensions when the tab is hidden
+        const entry = entries[0];
+        if (entry && entry.contentRect.width > 50 && entry.contentRect.height > 50) {
+          fitAddon?.fit();
+        }
       });
       resizeObserver.observe(terminalElement);
 
