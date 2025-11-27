@@ -46,12 +46,40 @@ type PluginCommandExecutor = (
 
 class TerminalManager {
   private terminals: Map<string, TerminalSession> = new Map();
-  private messageHandler?: (message: any) => void;
+  private terminalToWindow: Map<string, string> = new Map(); // terminalId -> windowId
+  private windowHandlers: Map<string, (message: any) => void> = new Map(); // windowId -> handler
   private pluginCommandChecker?: PluginCommandChecker;
   private pluginCommandExecutor?: PluginCommandExecutor;
 
+  /**
+   * @deprecated Use setWindowMessageHandler instead for proper multi-window support
+   */
   setMessageHandler(handler: (message: any) => void) {
-    this.messageHandler = handler;
+    // Legacy support - register as "default" window
+    this.windowHandlers.set("default", handler);
+  }
+
+  setWindowMessageHandler(windowId: string, handler: (message: any) => void) {
+    this.windowHandlers.set(windowId, handler);
+  }
+
+  removeWindowMessageHandler(windowId: string) {
+    this.windowHandlers.delete(windowId);
+    // Kill all terminals owned by this window
+    for (const [terminalId, ownerWindowId] of this.terminalToWindow.entries()) {
+      if (ownerWindowId === windowId) {
+        this.killTerminal(terminalId);
+      }
+    }
+  }
+
+  private getMessageHandler(terminalId: string): ((message: any) => void) | undefined {
+    const windowId = this.terminalToWindow.get(terminalId);
+    if (windowId) {
+      return this.windowHandlers.get(windowId);
+    }
+    // Fallback to default handler for legacy support
+    return this.windowHandlers.get("default");
   }
 
   /**
@@ -65,15 +93,15 @@ class TerminalManager {
     this.pluginCommandExecutor = executor;
   }
 
-  createTerminal(cwd: string = process.cwd(), shell?: string, cols: number = 80, rows: number = 24): string {
+  createTerminal(cwd: string = process.cwd(), shell?: string, cols: number = 80, rows: number = 24, windowId?: string): string {
     const terminalId = randomUUID();
-    
+
     // Determine shell
-    const defaultShell = process.platform === "win32" ? "cmd.exe" : 
+    const defaultShell = process.platform === "win32" ? "cmd.exe" :
                         process.platform === "darwin" ? "/bin/zsh" : "/bin/bash";
     const terminalShell = shell || process.env.SHELL || defaultShell;
 
-    // console.log(`Creating PTY terminal ${terminalId} with shell: ${terminalShell}, cwd: ${cwd}`);
+    // console.log(`Creating PTY terminal ${terminalId} with shell: ${terminalShell}, cwd: ${cwd}, windowId: ${windowId}`);
 
     // Path to the Zig PTY binary - in the MacOS directory alongside the main executable
     const ptyBinaryPath = path.join(process.cwd(), "colab-pty");
@@ -97,19 +125,26 @@ class TerminalManager {
       inputBuffer: '', // Buffer for plugin command detection
     };
 
+    // Track which window owns this terminal
+    if (windowId) {
+      this.terminalToWindow.set(terminalId, windowId);
+    }
+
     // Handle PTY output
     this.readPtyOutput(proc, terminalId);
 
     // Handle process exit
     proc.exited.then((exitCode) => {
       // console.log(`PTY process ${terminalId} exited with code ${exitCode}`);
-      this.messageHandler?.({
+      const handler = this.getMessageHandler(terminalId);
+      handler?.({
         type: "terminalExit",
         terminalId,
         exitCode,
         signal: 0,
       });
       this.terminals.delete(terminalId);
+      this.terminalToWindow.delete(terminalId);
     });
 
     this.terminals.set(terminalId, terminal);
@@ -200,6 +235,7 @@ class TerminalManager {
     const terminal = this.terminals.get(terminalId);
     if (!terminal) return;
 
+    const messageHandler = this.getMessageHandler(terminalId);
     // console.log(`PTY ${terminalId} response:`, response);
 
     switch (response.type) {
@@ -207,17 +243,17 @@ class TerminalManager {
         terminal.ready = true;
         // console.log(`PTY terminal ${terminalId} is ready`);
         break;
-      
+
       case 'data':
         if (response.data) {
-          this.messageHandler?.({
+          messageHandler?.({
             type: "terminalOutput",
             terminalId,
             data: response.data,
           });
         }
         break;
-      
+
       case 'cwd_update':
         if (response.data) {
           // Update the stored current working directory
@@ -225,10 +261,10 @@ class TerminalManager {
           console.log(`Terminal ${terminalId} CWD updated to: ${response.data}`);
         }
         break;
-      
+
       case 'error':
         console.error(`PTY error for ${terminalId}:`, response.error_msg);
-        this.messageHandler?.({
+        messageHandler?.({
           type: "terminalOutput",
           terminalId,
           data: `Error: ${response.error_msg}\r\n`,
@@ -251,6 +287,8 @@ class TerminalManager {
     }
 
     try {
+      const messageHandler = this.getMessageHandler(terminalId);
+
       // Check for plugin command interception
       if (this.pluginCommandChecker && this.pluginCommandExecutor) {
         // Handle special characters
@@ -264,7 +302,7 @@ class TerminalManager {
             terminal.inputBuffer = '';
 
             // Echo newline to terminal
-            this.messageHandler?.({
+            messageHandler?.({
               type: "terminalOutput",
               terminalId,
               data: '\r\n',
@@ -272,7 +310,7 @@ class TerminalManager {
 
             // Execute plugin command and stream output
             const write = (text: string) => {
-              this.messageHandler?.({
+              messageHandler?.({
                 type: "terminalOutput",
                 terminalId,
                 data: text,
@@ -349,13 +387,13 @@ class TerminalManager {
     if (!terminal) {
       return false;
     }
-    
+
     try {
       // Send shutdown message to PTY binary
       this.sendPtyMessage(terminalId, {
         type: 'shutdown'
       });
-      
+
       // Give PTY time to cleanup, then kill the process
       setTimeout(() => {
         try {
@@ -364,8 +402,9 @@ class TerminalManager {
           console.error("Error killing PTY process:", error);
         }
       }, 100);
-      
+
       this.terminals.delete(terminalId);
+      this.terminalToWindow.delete(terminalId);
       return true;
     } catch (error) {
       console.error("Error killing terminal:", error);

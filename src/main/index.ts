@@ -1478,8 +1478,8 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
           return safeTrashFileOrFolder(path);
         },
         createTerminal: ({ cwd, shell }) => {
-          console.log(`RPC createTerminal called with cwd: ${cwd}, shell: ${shell}`);
-          return terminalManager.createTerminal(cwd, shell);
+          console.log(`RPC createTerminal called with cwd: ${cwd}, shell: ${shell}, windowId: ${windowId}`);
+          return terminalManager.createTerminal(cwd, shell, 80, 24, windowId);
         },
         writeToTerminal: ({ terminalId, data }) => {
           return terminalManager.writeToTerminal(terminalId, data);
@@ -2259,8 +2259,8 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
     });
   });
 
-  // Set up terminal manager message handler
-  terminalManager.setMessageHandler((message) => {
+  // Set up terminal manager message handler for this window
+  terminalManager.setWindowMessageHandler(windowId, (message) => {
     mainWindow.webview.rpc?.send(message.type, {
       terminalId: message.terminalId,
       data: message.data,
@@ -2352,6 +2352,9 @@ const createWindow = (workspaceId: string, window?: WindowConfigType) => {
     }
 
     delete workspaceWindows[workspaceId][windowId];
+
+    // Clean up terminals owned by this window
+    terminalManager.removeWindowMessageHandler(windowId);
 
     // If we're just hiding it we don't want to remove it from the db
     if (workspaceWindow.status === "hiding") {
