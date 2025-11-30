@@ -523,6 +523,161 @@ export async function activate(api: PluginAPI): Promise<void> {
     }
   };
 
+  // Deploy to Webflow Cloud using expect to handle interactive prompts
+  const deployToCloudWithExpect = async (cwd: string, siteId: string, siteToken: string) => {
+    api.log.info('=== deployToCloudWithExpect called ===');
+    api.log.info('Project directory: ' + cwd);
+    api.log.info('Site ID: ' + siteId);
+
+    try {
+      api.notifications.showInfo('Deploying to Webflow Cloud...');
+
+      // Use expect to handle interactive prompts (telemetry, etc.)
+      const expectScript = `
+        cd "${cwd}"
+        export WEBFLOW_TELEMETRY=false
+        export DO_NOT_TRACK=1
+        export WEBFLOW_SKIP_UPDATE_CHECKS=true
+        export WEBFLOW_SITE_ID="${siteId}"
+        export WEBFLOW_SITE_API_TOKEN="${siteToken}"
+        export CI=true
+        expect -c '
+          log_user 1
+          set timeout 300
+          spawn bunx @webflow/webflow-cli cloud deploy
+          expect {
+            -re "Help us improve.*\\\\?" {
+              send "y\\r"
+              exp_continue
+            }
+            -re "save this choice.*\\\\?" {
+              send "y\\r"
+              exp_continue
+            }
+            -re "\\\\(Y/n\\\\)" {
+              send "y\\r"
+              exp_continue
+            }
+            -re "\\\\(y/N\\\\)" {
+              send "y\\r"
+              exp_continue
+            }
+            -re "Yes/No" {
+              send "Yes\\r"
+              exp_continue
+            }
+            -re "\\\\? Yes" {
+              # Already answered, continue
+              exp_continue
+            }
+            -re "\\\\? No" {
+              # Already answered no, continue
+              exp_continue
+            }
+            -re "Resolving|Saved lockfile|packages are updated" {
+              # Package resolution, continue
+              exp_continue
+            }
+            -re "Building|Deploying|Uploading|Creating|Compiling" {
+              # Progress indicators, continue waiting
+              exp_continue
+            }
+            -re "https://" {
+              # URL being shown, continue
+              exp_continue
+            }
+            -re "✔|✓" {
+              # Checkmark - progress or completion indicator
+              exp_continue
+            }
+            "Successfully" {
+              # Done - success, wait for eof
+              exp_continue
+            }
+            "deployed successfully" {
+              # Done - success
+              exp_continue
+            }
+            "Deployment complete" {
+              # Done - success
+              exp_continue
+            }
+            "App URL:" {
+              # Success - app deployed with URL
+              exp_continue
+            }
+            "ERROR:" {
+              # Error occurred, let it finish
+              exp_continue
+            }
+            "error:" {
+              # Error occurred, let it finish
+              exp_continue
+            }
+            timeout {
+              puts "EXPECT_TIMEOUT"
+              exit 1
+            }
+            eof {
+              # Process ended
+            }
+          }
+        '
+      `;
+
+      // Set initial state - deploy is in progress
+      api.state.set('cloudDeployStatus', {
+        status: 'running',
+        timestamp: Date.now(),
+      });
+
+      // Run the deploy command
+      api.shell.exec(expectScript, {
+        cwd,
+        timeout: 310000, // 5+ minutes
+      }).then(result => {
+        api.log.info('Deploy command finished:', result.exitCode);
+        api.log.info('Output:', result.stdout);
+        if (result.stderr) {
+          api.log.warn('Stderr:', result.stderr);
+        }
+
+        if (result.exitCode === 0 && !result.stdout.toLowerCase().includes('error:')) {
+          api.notifications.showInfo('Deployed to Webflow Cloud successfully!');
+          api.state.set('cloudDeployStatus', {
+            status: 'success',
+            output: result.stdout,
+            timestamp: Date.now(),
+          });
+        } else {
+          api.notifications.showError('Failed to deploy to Webflow Cloud');
+          api.state.set('cloudDeployStatus', {
+            status: 'error',
+            error: result.stderr || result.stdout || 'Unknown error',
+            timestamp: Date.now(),
+          });
+        }
+      }).catch(e => {
+        api.log.error('Cloud deploy error:', e);
+        api.notifications.showError('Failed to deploy: ' + (e instanceof Error ? e.message : String(e)));
+        api.state.set('cloudDeployStatus', {
+          status: 'error',
+          error: e instanceof Error ? e.message : 'Failed to deploy',
+          timestamp: Date.now(),
+        });
+      });
+
+    } catch (e) {
+      api.log.error('Cloud deploy setup error:', e);
+      api.notifications.showError('Failed to start deploy: ' + (e instanceof Error ? e.message : String(e)));
+      api.state.set('cloudDeployStatus', {
+        status: 'error',
+        error: e instanceof Error ? e.message : 'Failed to deploy',
+        timestamp: Date.now(),
+      });
+    }
+  };
+
   // Load token from project's .env file if it exists
   const loadEnvToken = async () => {
     try {
@@ -574,6 +729,14 @@ export async function activate(api: PluginAPI): Promise<void> {
       const cwd = (msg as { cwd?: string }).cwd;
       if (cwd) {
         await shareLibraryWithBrowserAuth(cwd);
+      }
+    } else if (msg.type === 'deployToCloud') {
+      console.log('[Webflow] Handling deployToCloud');
+      const { cwd, siteId, siteToken } = msg as { cwd?: string; siteId?: string; siteToken?: string };
+      if (cwd && siteId && siteToken) {
+        await deployToCloudWithExpect(cwd, siteId, siteToken);
+      } else {
+        api.log.error('deployToCloud missing required params:', { cwd: !!cwd, siteId: !!siteId, siteToken: !!siteToken });
       }
     }
   });
@@ -634,24 +797,13 @@ export async function activate(api: PluginAPI): Promise<void> {
         };
       }
 
-      // Code Components library config
+      // Webflow config (Code Components or Cloud)
       if (filename === 'webflow.json') {
         return {
           badge: 'WF',
           badgeColor: '#4353ff',
-          tooltip: 'Webflow Code Components library',
+          tooltip: 'Webflow project configuration',
         };
-      }
-
-      // Webflow Cloud project marker
-      if (filename === '.colab.json') {
-        if (filePath.includes('/cloud/')) {
-          return {
-            badge: 'WF',
-            badgeColor: '#00c853',
-            tooltip: 'Webflow Cloud project',
-          };
-        }
       }
 
       return undefined;
@@ -791,113 +943,6 @@ export async function activate(api: PluginAPI): Promise<void> {
     }
   );
   disposables.push(initMenuDisposable);
-
-  const syncMenuDisposable = api.contextMenu.registerItem(
-    {
-      id: 'webflow-sync',
-      label: 'Sync Webflow Components',
-      context: 'fileTree',
-    },
-    async (ctx) => {
-      if (!ctx.filePath) return;
-
-      const { existsSync, readFileSync } = await import('fs');
-      const { statSync } = await import('fs');
-      const { join, dirname } = await import('path');
-      const { spawn } = await import('child_process');
-
-      // Get the directory path
-      let targetDir = ctx.filePath;
-      try {
-        const stat = statSync(ctx.filePath);
-        if (!stat.isDirectory()) {
-          targetDir = dirname(ctx.filePath);
-        }
-      } catch {
-        targetDir = dirname(ctx.filePath);
-      }
-
-      // Find .webflowrc.json (check current dir and parents)
-      let configPath = join(targetDir, '.webflowrc.json');
-      let searchDir = targetDir;
-      while (!existsSync(configPath)) {
-        const parent = dirname(searchDir);
-        if (parent === searchDir) break; // reached root
-        searchDir = parent;
-        configPath = join(searchDir, '.webflowrc.json');
-      }
-
-      if (!existsSync(configPath)) {
-        api.notifications.showError('No DevLink configuration found. Right-click a folder and select "Initialize Webflow DevLink" first.');
-        return;
-      }
-
-      // Check authentication
-      const tokens = api.state.get<WebflowToken[]>('tokens') || [];
-      const validToken = tokens.find(t => t.status === 'valid');
-
-      if (!validToken) {
-        api.notifications.showError('Not connected to Webflow. Open Settings → Webflow to connect.');
-        return;
-      }
-
-      const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-      api.notifications.showInfo(`Syncing components from "${config.siteName || 'Webflow'}"...`);
-
-      try {
-        // Use bundled bun from Colab
-        const bunPath = api.paths.bun;
-
-        await new Promise<void>((resolve, reject) => {
-          // Token is read from .webflowrc.json by the CLI
-          const proc = spawn(bunPath, ['run', 'webflow', 'devlink', 'sync'], {
-            cwd: searchDir,
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: {
-              ...process.env,
-              // Use our stored token instead of relying on config file
-              WEBFLOW_SITE_API_TOKEN: validToken.token,
-              // Disable telemetry prompt - we're running non-interactively
-              WEBFLOW_TELEMETRY: 'false',
-              DO_NOT_TRACK: '1',
-            },
-          });
-
-          let output = '';
-          proc.stdout.on('data', (data: Buffer) => {
-            output += data.toString();
-          });
-          proc.stderr.on('data', (data: Buffer) => {
-            output += data.toString();
-          });
-
-          proc.on('close', (code) => {
-            if (code === 0) {
-              resolve();
-            } else {
-              reject(new Error(output || `Process exited with code ${code}`));
-            }
-          });
-
-          proc.on('error', reject);
-        });
-
-        api.notifications.showInfo('Components synced successfully!');
-        api.log.info('DevLink sync completed');
-
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-
-        if (message.includes('not found') || message.includes('ENOENT')) {
-          api.notifications.showError('Webflow CLI not found. Run "bun install" first.');
-        } else {
-          api.notifications.showError(`Sync failed: ${message.slice(0, 100)}`);
-        }
-        api.log.error('DevLink sync error:', e);
-      }
-    }
-  );
-  disposables.push(syncMenuDisposable);
 
   // Context menu: Initialize Code Components library
   const initComponentsMenuDisposable = api.contextMenu.registerItem(
@@ -1213,30 +1258,24 @@ export default declareComponent(ColabBadge, {
       const { statSync } = await import('fs');
       const { join, dirname, basename } = await import('path');
 
-      // Get the directory path
-      let targetDir = ctx.filePath;
+      // Get the parent directory path
+      let parentDir = ctx.filePath;
       try {
         const stat = statSync(ctx.filePath);
         if (!stat.isDirectory()) {
-          targetDir = dirname(ctx.filePath);
+          parentDir = dirname(ctx.filePath);
         }
       } catch {
-        targetDir = dirname(ctx.filePath);
+        parentDir = dirname(ctx.filePath);
       }
 
-      // Check if already initialized
-      const configPath = join(targetDir, '.colab.json');
-      if (existsSync(configPath)) {
-        try {
-          const existing = JSON.parse(readFileSync(configPath, 'utf-8'));
-          if (existing.type === 'webflow-cloud') {
-            api.notifications.showWarning('Webflow Cloud is already initialized in this directory');
-            return;
-          }
-        } catch {
-          // Not a valid JSON, continue
-        }
-      }
+      // Create a "webflow-cloud" folder inside the target directory (with unique suffix if needed)
+      const folderName = api.utils.getUniqueNewName(parentDir, 'webflow-cloud');
+      const targetDir = join(parentDir, folderName);
+      const configPath = join(targetDir, 'webflow.json');
+
+      // Create the webflow-cloud folder
+      mkdirSync(targetDir, { recursive: true });
 
       // Check authentication
       const tokens = api.state.get<WebflowToken[]>('tokens') || [];
@@ -1247,48 +1286,233 @@ export default declareComponent(ColabBadge, {
         return;
       }
 
-      // Create .colab.json config file for Webflow Cloud
-      const projectName = basename(targetDir);
+      // Create webflow.json config file for Webflow Cloud
+      // Uses the official Webflow Cloud config structure
+      const projectName = folderName;
       const config = {
-        v: 1,
-        name: projectName,
-        type: 'webflow-cloud',
-        framework: 'astro', // Default to Astro
-        siteId: '', // Will be filled in slate UI
-        siteName: '',
-        mountPath: '/app',
-        config: {},
+        cloud: {
+          framework: 'astro',
+        },
       };
       writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-      // Update or create package.json
+      // Create package.json
+      // Include @astrojs/cloudflare as it's required by Webflow Cloud CLI
       const packageJsonPath = join(targetDir, 'package.json');
-      let packageJson: Record<string, unknown> = {};
-      if (existsSync(packageJsonPath)) {
-        packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
-      } else {
-        packageJson = {
-          name: projectName,
-          version: '1.0.0',
-          type: 'module',
-        };
-      }
-
-      packageJson.devDependencies = {
-        ...(packageJson.devDependencies as Record<string, string> || {}),
-        '@webflow/webflow-cli': '^1.1.1',
+      const packageJson = {
+        name: projectName,
+        version: '1.0.0',
+        type: 'module',
+        scripts: {
+          'dev': 'astro dev',
+          'build': 'astro build',
+          'preview': 'astro preview',
+          'webflow:deploy': 'webflow cloud deploy',
+        },
+        dependencies: {
+          'astro': '^4.16.0',
+          '@astrojs/cloudflare': '^12.0.1',
+        },
+        devDependencies: {
+          '@webflow/webflow-cli': '^1.1.1',
+        },
       };
-
-      packageJson.scripts = {
-        ...(packageJson.scripts as Record<string, string> || {}),
-        'dev': 'astro dev',
-        'build': 'astro build',
-        'webflow:deploy': 'webflow cloud deploy',
-      };
-
       writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
 
-      api.notifications.showInfo(`Webflow Cloud app initialized! Configure your site in the slate UI.`);
+      // Create astro.config.mjs
+      // Note: Webflow CLI will override this with their own config during deploy,
+      // but we set up a basic config for local development
+      const astroConfigPath = join(targetDir, 'astro.config.mjs');
+      const astroConfig = `import { defineConfig } from 'astro/config';
+
+export default defineConfig({
+  // Webflow Cloud will configure the cloudflare adapter during deploy
+  // This config is for local development
+  output: 'static',
+  build: {
+    format: 'file',
+  },
+});
+`;
+      writeFileSync(astroConfigPath, astroConfig);
+
+      // Create tsconfig.json
+      const tsconfigPath = join(targetDir, 'tsconfig.json');
+      const tsconfig = {
+        extends: 'astro/tsconfigs/strict',
+        compilerOptions: {
+          strictNullChecks: true,
+        },
+      };
+      writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
+
+      // Create src directory structure
+      const srcDir = join(targetDir, 'src');
+      const pagesDir = join(srcDir, 'pages');
+      const layoutsDir = join(srcDir, 'layouts');
+      const componentsDir = join(srcDir, 'components');
+      mkdirSync(pagesDir, { recursive: true });
+      mkdirSync(layoutsDir, { recursive: true });
+      mkdirSync(componentsDir, { recursive: true });
+
+      // Create base layout
+      const layoutPath = join(layoutsDir, 'Layout.astro');
+      const layoutContent = `---
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+    <style>
+      :root {
+        --bg: #004875;
+        --fg: #ffffff;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html, body {
+        font-family: system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        min-height: 100vh;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+    </style>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
+`;
+      writeFileSync(layoutPath, layoutContent);
+
+      // Create index page
+      const indexPath = join(pagesDir, 'index.astro');
+      const indexContent = `---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Hello Colab">
+  <main>
+    <section class="hero">
+      <h1>Hello, Colab!</h1>
+      <p>Your app is ready for Webflow Cloud.</p>
+      <div class="actions">
+        <a href="https://blackboard.sh" target="_blank" class="button">
+          Learn More
+        </a>
+      </div>
+    </section>
+  </main>
+</Layout>
+
+<style>
+  main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+  .hero {
+    text-align: center;
+    max-width: 600px;
+  }
+  h1 {
+    font-size: 4rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: #ffffff;
+  }
+  p {
+    font-size: 1.5rem;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 2rem;
+  }
+  .actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+  }
+  .button {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.875rem 2rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 1rem;
+    text-decoration: none;
+    transition: all 0.2s;
+    background: #ffffff;
+    color: #004875;
+  }
+  .button:hover {
+    background: rgba(255, 255, 255, 0.9);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+</style>
+`;
+      writeFileSync(indexPath, indexContent);
+
+      // Create .gitignore
+      const gitignorePath = join(targetDir, '.gitignore');
+      const gitignoreContent = `# build output
+dist/
+
+# dependencies
+node_modules/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# environment variables
+.env
+.env.production
+
+# macOS
+.DS_Store
+`;
+      writeFileSync(gitignorePath, gitignoreContent);
+
+      // Run bun install
+      try {
+        const bunPath = api.paths.bun;
+        const { spawn } = await import('child_process');
+        await new Promise<void>((resolve, reject) => {
+          const proc = spawn(bunPath, ['install'], {
+            cwd: targetDir,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          proc.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`bun install failed with code ${code}`));
+          });
+          proc.on('error', reject);
+        });
+      } catch (err) {
+        api.log.warn(`Failed to run bun install: ${err}`);
+      }
+
+      api.notifications.showInfo(`Webflow Cloud app created! Click on webflow.json to configure.`);
       api.log.info(`Webflow Cloud app initialized in ${targetDir}`);
     }
   );
@@ -1333,16 +1557,16 @@ export default declareComponent(ColabBadge, {
   });
   disposables.push(dashboardSlateDisposable);
 
-  // Note: Cloud slate uses .colab.json which is handled by Colab's native slate system.
-  // The context menu "Initialize Webflow Cloud App" creates .colab.json with type: webflow-cloud
-  // which is then handled by the native getSlateForNode() function.
-  // We still register the component for the PluginSlate system:
+  // Note: Cloud slate uses webflow.json with a "cloud" section.
+  // The code-components slate (which matches webflow.json) auto-detects the content
+  // and renders the cloud UI when appropriate via effectiveSlateType().
+  // This registration is kept for the component mapping but patterns are empty.
   const cloudSlateDisposable = api.slates.register({
     id: 'cloud',
     name: 'Webflow Cloud',
     description: 'Deploy apps to Webflow Cloud infrastructure',
     icon: '☁',
-    patterns: [], // Uses .colab.json with type: webflow-cloud (handled natively)
+    patterns: [], // Auto-detected from webflow.json content in WebflowSlate
     component: 'WebflowCloudSlate',
   });
   disposables.push(cloudSlateDisposable);

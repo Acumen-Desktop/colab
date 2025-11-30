@@ -73,6 +73,12 @@ interface CloudProjectConfig {
   siteName?: string;
   framework?: string;
   mountPath?: string;
+  // Nested cloud config (webflow.json format)
+  cloud?: {
+    siteId?: string;
+    siteName?: string;
+    mountPath?: string;
+  };
 }
 
 const PLUGIN_NAME = "colab-webflow";
@@ -841,46 +847,265 @@ export const WebflowSlate = (props: WebflowSlateProps): JSXElement => {
     openNewTabForNode('__COLAB_INTERNAL__/web', false, { focusNewTab: true, url: "https://webflow.com/dashboard" });
   };
 
+  // Cloud: Deploy terminal state (for streaming output)
+  const [cloudDeployTerminalId, setCloudDeployTerminalId] = createSignal<string | null>(null);
+
   // Cloud: Deploy to Webflow Cloud
   const deployToCloud = async () => {
     setDeployRunning(true);
     setCommandOutput(null);
     setError(null);
+
     try {
-      const token = authToken();
-      const envVars: Record<string, string> = {
-        WEBFLOW_TELEMETRY: 'false',
-        DO_NOT_TRACK: '1',
-      };
-      if (token) {
-        envVars.WEBFLOW_API_TOKEN = token;
+      const cfg = config() as CloudProjectConfig | null;
+      const cwd = getProjectRoot();
+
+      if (!cwd) {
+        setError("Could not determine project directory");
+        setDeployRunning(false);
+        return;
       }
-      // Use bunx which auto-installs if needed
-      await runCommandWithEnv("bunx", ["@webflow/webflow-cli", "cloud", "deploy"], envVars);
-    } finally {
+
+      // Check for site selection
+      const siteId = cfg?.cloud?.siteId || cfg?.siteId;
+      if (!siteId) {
+        setError("Please select a Webflow site first");
+        setDeployRunning(false);
+        return;
+      }
+
+      // Get the site token - prefer site-specific token if available
+      const token = getSiteToken(siteId) || authToken();
+      if (!token) {
+        setError("No authentication token found. Please connect your Webflow account in Settings.");
+        setDeployRunning(false);
+        return;
+      }
+
+      // Pre-configure telemetry in webflow.json to skip prompts
+      await ensureTelemetryConfig(cwd);
+
+      // Create a terminal for streaming output
+      const terminalId = await electrobun.rpc?.request.createTerminal({ cwd });
+      if (terminalId) {
+        setCloudDeployTerminalId(terminalId);
+
+        // Build the deploy command with env vars and auto-answer prompts
+        // Use printf to pipe 'y' responses for any remaining prompts
+        // Set env vars silently first, then run the command on a new line to avoid showing tokens
+        const envSetup = `export WEBFLOW_SITE_ID="${siteId}" WEBFLOW_SITE_API_TOKEN="${token}" WEBFLOW_SKIP_UPDATE_CHECKS=true`;
+        const deployCmd = `printf 'y\\ny\\ny\\n' | bunx @webflow/webflow-cli cloud deploy`;
+
+        // Send env vars with no echo, then clear and run the visible command
+        await electrobun.rpc?.request.writeToTerminal({
+          terminalId,
+          data: `${envSetup} && clear && echo "Deploying to Webflow Cloud..." && ${deployCmd}\n`
+        });
+
+        // Monitor for completion - check terminal status periodically
+        let checkCount = 0;
+        const maxChecks = 300; // 5 minutes at 1 second intervals
+
+        const checkCompletion = () => {
+          checkCount++;
+          // We can't easily detect completion from terminal output,
+          // so we just leave the terminal running and let user see the output
+          // The deploy button stays in "running" state until they click again or we timeout
+          if (checkCount >= maxChecks) {
+            setDeployRunning(false);
+          }
+        };
+
+        // Set a timeout to eventually reset the running state
+        setTimeout(() => {
+          setDeployRunning(false);
+        }, 300000); // 5 minutes max
+      } else {
+        setError("Failed to create terminal for deployment");
+        setDeployRunning(false);
+      }
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      setError(errMsg);
       setDeployRunning(false);
     }
   };
 
+  // Cloud: Dev server state
+  const [cloudDevServerTerminalId, setCloudDevServerTerminalId] = createSignal<string | null>(null);
+  const [cloudDevServerRunning, setCloudDevServerRunning] = createSignal(false);
+
+
   // Cloud: Start local dev server
-  const startLocalDev = async () => {
+  const startCloudDevServer = async () => {
     setDevRunning(true);
     setCommandOutput(null);
     setError(null);
     try {
-      // For local dev, just use bun run dev (framework's dev server)
-      await runCommand("bun", ["run", "dev"]);
+      const cwd = getProjectRoot();
+      if (!cwd) {
+        throw new Error("Could not determine project directory");
+      }
+
+      // Create a terminal - output will stream directly to the TerminalOutputPanel
+      const terminalId = await electrobun.rpc?.request.createTerminal({ cwd });
+      if (terminalId) {
+        setCloudDevServerTerminalId(terminalId);
+
+        // First install deps, then run dev server
+        await electrobun.rpc?.request.writeToTerminal({
+          terminalId,
+          data: "bun install && bun run dev\n"
+        });
+
+        setCloudDevServerRunning(true);
+      } else {
+        setError("Failed to create terminal for dev server");
+      }
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      setError(errMsg);
     } finally {
       setDevRunning(false);
+    }
+  };
+
+  // Cloud: Stop dev server
+  const stopCloudDevServer = async () => {
+    const terminalId = cloudDevServerTerminalId();
+    if (terminalId) {
+      // Send Ctrl+C to stop the server
+      await electrobun.rpc?.request.writeToTerminal({
+        terminalId,
+        data: "\x03" // Ctrl+C
+      });
+      // Kill the terminal
+      await electrobun.rpc?.request.killTerminal({ terminalId });
+      setCloudDevServerTerminalId(null);
+      setCloudDevServerRunning(false);
+      setCommandOutput("Dev server stopped.\n");
+    }
+  };
+
+  // Cloud: Toggle dev server
+  const toggleCloudDevServer = async () => {
+    if (cloudDevServerRunning()) {
+      await stopCloudDevServer();
+    } else {
+      await startCloudDevServer();
+    }
+  };
+
+  // Update Cloud config file with selected site
+  const updateCloudConfigSite = async (site: WebflowSite, token: string) => {
+    if (!props.node?.path) {
+      console.error('[WebflowSlate] updateCloudConfigSite: no node path');
+      return;
+    }
+
+    console.log('[WebflowSlate] updateCloudConfigSite:', site.displayName, 'path:', props.node.path);
+
+    try {
+      // Read current config
+      const result = await electrobun.rpc?.request.readFile({ path: props.node.path });
+      if (!result?.textContent) {
+        setError('Failed to read config file');
+        return;
+      }
+
+      const currentConfig = JSON.parse(result.textContent);
+
+      // Update the cloud section with site info
+      const newConfig = {
+        ...currentConfig,
+        cloud: {
+          ...(currentConfig.cloud || {}),
+          siteId: site.id,
+          siteName: site.displayName,
+        },
+      };
+
+      const jsonContent = JSON.stringify(newConfig, null, 2);
+      console.log('[WebflowSlate] Writing cloud config to:', props.node.path);
+
+      const writeResult = await electrobun.rpc?.request.writeFile({
+        path: props.node.path,
+        value: jsonContent,
+      });
+
+      if (writeResult?.success) {
+        setConfig(newConfig as any);
+        console.log('[WebflowSlate] Cloud config saved successfully');
+      } else {
+        console.error('[WebflowSlate] writeFile failed:', writeResult?.error);
+        setError('Failed to save configuration: ' + (writeResult?.error || 'unknown error'));
+      }
+    } catch (e) {
+      console.error("[WebflowSlate] Failed to update cloud config:", e);
+      setError("Failed to update configuration");
+    }
+  };
+
+  // Update Cloud config field (e.g., mountPath)
+  const updateCloudConfigField = async (key: string, value: string) => {
+    if (!props.node?.path) return;
+
+    try {
+      const result = await electrobun.rpc?.request.readFile({ path: props.node.path });
+      if (!result?.textContent) return;
+
+      const currentConfig = JSON.parse(result.textContent);
+
+      // Update the cloud section
+      const newConfig = {
+        ...currentConfig,
+        cloud: {
+          ...(currentConfig.cloud || {}),
+          [key]: value || undefined, // Remove empty values
+        },
+      };
+
+      // Clean up undefined values
+      if (!newConfig.cloud[key]) {
+        delete newConfig.cloud[key];
+      }
+
+      await electrobun.rpc?.request.writeFile({
+        path: props.node.path,
+        value: JSON.stringify(newConfig, null, 2),
+      });
+
+      setConfig(newConfig as any);
+    } catch (e) {
+      console.error('[WebflowSlate] Failed to update cloud config field:', e);
+      setError(`Failed to update ${key}`);
     }
   };
 
   // Store token for use in callbacks
   const [authToken, setAuthToken] = createSignal<string | null>(null);
 
+  // Auto-detect slate type from config content for webflow.json files
+  // This allows a single webflow.json pattern to render different UIs based on content
+  const effectiveSlateType = () => {
+    // If not code-components, use the passed slateType
+    if (props.slateType !== "code-components") return props.slateType;
+
+    const cfg = config() as any;
+    if (!cfg) return props.slateType;
+
+    // If webflow.json has "cloud" section but no "library" section, show cloud UI
+    if (cfg.cloud && !cfg.library) {
+      return "cloud" as const;
+    }
+
+    return props.slateType;
+  };
+
   // Initialize component
   onMount(async () => {
     console.log('[WebflowSlate] onMount, slateType:', props.slateType);
+
     const token = await checkConnection();
     console.log('[WebflowSlate] token found:', !!token);
     if (token) {
@@ -928,7 +1153,7 @@ export const WebflowSlate = (props: WebflowSlateProps): JSXElement => {
       <Show when={!loading()}>
         <Switch>
           {/* DevLink Project Slate */}
-          <Match when={props.slateType === "devlink"}>
+          <Match when={effectiveSlateType() === "devlink"}>
             <DevLinkSlateContent
               config={config() as DevLinkConfig}
               connected={connected()}
@@ -951,7 +1176,7 @@ export const WebflowSlate = (props: WebflowSlateProps): JSXElement => {
           </Match>
 
           {/* Code Components Slate */}
-          <Match when={props.slateType === "code-components"}>
+          <Match when={effectiveSlateType() === "code-components"}>
             <CodeComponentsSlateContent
               config={config() as CodeComponentsConfig}
               connected={connected()}
@@ -970,23 +1195,30 @@ export const WebflowSlate = (props: WebflowSlateProps): JSXElement => {
           </Match>
 
           {/* Cloud Project Slate */}
-          <Match when={props.slateType === "cloud"}>
+          <Match when={effectiveSlateType() === "cloud"}>
             <CloudSlateContent
               config={config() as CloudProjectConfig}
               connected={connected()}
+              sites={sites()}
               onOpenSettings={openSettings}
               onDeploy={deployToCloud}
-              onDev={startLocalDev}
+              onToggleDevServer={toggleCloudDevServer}
+              onChangeSite={(site) => {
+                const token = authToken();
+                if (token) updateCloudConfigSite(site, token);
+              }}
+              onConfigChange={updateCloudConfigField}
               deployRunning={deployRunning()}
-              devRunning={devRunning()}
+              devServerRunning={cloudDevServerRunning()}
               commandOutput={commandOutput()}
               error={error()}
               nodePath={props.node?.path}
+              streamTerminalId={cloudDeployTerminalId() || cloudDevServerTerminalId()}
             />
           </Match>
 
           {/* Dashboard Slate */}
-          <Match when={props.slateType === "dashboard"}>
+          <Match when={effectiveSlateType() === "dashboard"}>
             <DashboardSlateContent
               connected={connected()}
               sites={sites()}
@@ -1561,15 +1793,21 @@ const CodeComponentsSlateContent = (props: {
 const CloudSlateContent = (props: {
   config: CloudProjectConfig | null;
   connected: boolean;
+  sites: WebflowSite[];
   onOpenSettings: () => void;
   onDeploy: () => Promise<void>;
-  onDev: () => Promise<void>;
+  onToggleDevServer: () => Promise<void>;
+  onChangeSite: (site: WebflowSite) => void;
+  onConfigChange: (key: string, value: string) => Promise<void>;
   deployRunning: boolean;
-  devRunning: boolean;
+  devServerRunning: boolean;
   commandOutput: string | null;
   error: string | null;
   nodePath?: string;
+  streamTerminalId?: string | null;
 }): JSXElement => {
+  const [showSitePicker, setShowSitePicker] = createSignal(false);
+
   const getFrameworkIcon = () => {
     switch (props.config?.framework) {
       case "astro":
@@ -1591,6 +1829,14 @@ const CloudSlateContent = (props: {
         return "#4353ff";
     }
   };
+
+  // Get mountPath from either nested cloud config or top-level
+  const getMountPath = () => props.config?.cloud?.mountPath || props.config?.mountPath;
+
+  // Get siteId from either nested cloud config or top-level
+  const getSiteId = () => props.config?.cloud?.siteId || props.config?.siteId;
+  const getSiteName = () => props.config?.cloud?.siteName || props.config?.siteName;
+  const selectedSite = () => props.sites.find(s => s.id === getSiteId());
 
   return (
     <div>
@@ -1659,46 +1905,196 @@ const CloudSlateContent = (props: {
       </Show>
 
       <Show when={props.connected && props.config}>
-        <div
-          style={{
-            background: "#2a2a2a",
-            "border-radius": "8px",
-            padding: "20px",
-            "margin-bottom": "16px",
-          }}
-        >
-          <h3
+        {/* Site Selection */}
+        <Show when={!getSiteId()}>
+          <div
             style={{
-              margin: "0 0 16px 0",
-              "font-size": "14px",
-              color: "#fff",
-              "font-weight": 500,
+              background: "#2a2a2a",
+              "border-radius": "8px",
+              padding: "20px",
+              "margin-bottom": "16px",
             }}
           >
-            Project Configuration
-          </h3>
+            <h3
+              style={{
+                margin: "0 0 16px 0",
+                "font-size": "14px",
+                color: "#fff",
+                "font-weight": 500,
+              }}
+            >
+              Select a Webflow Site
+            </h3>
+            <p style={{ "font-size": "13px", color: "#888", "margin-bottom": "16px" }}>
+              Choose which site to deploy this app to:
+            </p>
+            <Show when={props.sites.length > 0}>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                <For each={props.sites}>
+                  {(site) => (
+                    <button
+                      onClick={() => props.onChangeSite(site)}
+                      style={{
+                        background: "#1e1e1e",
+                        border: "1px solid #333",
+                        "border-radius": "8px",
+                        padding: "16px",
+                        cursor: "pointer",
+                        "text-align": "left",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      <div style={{ "font-size": "14px", "font-weight": 500, color: "#fff" }}>
+                        {site.displayName}
+                      </div>
+                      <div style={{ "font-size": "12px", color: "#666", "margin-top": "4px" }}>
+                        {site.shortName}
+                      </div>
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+            <Show when={props.sites.length === 0}>
+              <p style={{ color: "#666", "font-size": "13px" }}>
+                No sites found. Make sure your Webflow account has sites available.
+              </p>
+            </Show>
+          </div>
+        </Show>
 
-          <ConfigField label="Site ID" value={props.config?.siteId} mono />
-          <ConfigField label="Site Name" value={props.config?.siteName} />
-          <ConfigField label="Mount Path" value={props.config?.mountPath} mono />
-          <ConfigField label="Framework" value={props.config?.framework} />
-        </div>
+        {/* Site Info (when selected) */}
+        <Show when={getSiteId()}>
+          <div
+            style={{
+              background: "#2a2a2a",
+              "border-radius": "8px",
+              padding: "20px",
+              "margin-bottom": "16px",
+            }}
+          >
+            <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "16px" }}>
+              <h3
+                style={{
+                  margin: 0,
+                  "font-size": "14px",
+                  color: "#fff",
+                  "font-weight": 500,
+                }}
+              >
+                Deployment Target
+              </h3>
+              <button
+                onClick={() => setShowSitePicker(!showSitePicker())}
+                style={{
+                  background: "transparent",
+                  border: "1px solid #444",
+                  "border-radius": "4px",
+                  padding: "4px 8px",
+                  color: "#888",
+                  cursor: "pointer",
+                  "font-size": "12px",
+                }}
+              >
+                Change
+              </button>
+            </div>
+
+            <Show when={!showSitePicker()}>
+              <div
+                style={{
+                  background: "#1e1e1e",
+                  "border-radius": "8px",
+                  padding: "16px",
+                  border: "1px solid #333",
+                }}
+              >
+                <div style={{ "font-size": "16px", "font-weight": 500, color: "#fff" }}>
+                  {selectedSite()?.displayName || getSiteName() || "Unknown Site"}
+                </div>
+                <div style={{ "font-size": "12px", color: "#666", "margin-top": "4px" }}>
+                  {selectedSite()?.shortName || getSiteId()}
+                </div>
+              </div>
+            </Show>
+
+            <Show when={showSitePicker()}>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                <For each={props.sites}>
+                  {(site) => (
+                    <button
+                      onClick={() => {
+                        props.onChangeSite(site);
+                        setShowSitePicker(false);
+                      }}
+                      style={{
+                        background: site.id === getSiteId() ? "#3a3a3a" : "#1e1e1e",
+                        border: site.id === getSiteId() ? "1px solid #4353ff" : "1px solid #333",
+                        "border-radius": "8px",
+                        padding: "16px",
+                        cursor: "pointer",
+                        "text-align": "left",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      <div style={{ "font-size": "14px", "font-weight": 500, color: "#fff" }}>
+                        {site.displayName}
+                      </div>
+                      <div style={{ "font-size": "12px", color: "#666", "margin-top": "4px" }}>
+                        {site.shortName}
+                      </div>
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+
+          {/* Configuration Section */}
+          <div
+            style={{
+              background: "#2a2a2a",
+              "border-radius": "8px",
+              padding: "20px",
+              "margin-bottom": "16px",
+            }}
+          >
+            <h3
+              style={{
+                margin: "0 0 16px 0",
+                "font-size": "14px",
+                color: "#fff",
+                "font-weight": 500,
+              }}
+            >
+              Configuration
+            </h3>
+            <ConfigField label="Framework" value={props.config?.framework} />
+            <EditableConfigField
+              label="Mount Path"
+              value={getMountPath()}
+              placeholder="/app (optional - where to mount on your site)"
+              mono
+              onChange={(value) => props.onConfigChange("mountPath", value)}
+            />
+          </div>
+        </Show>
 
         <div style={{ display: "flex", gap: "12px", "flex-wrap": "wrap", "margin-bottom": "16px" }}>
           <ActionButton
             icon="🚀"
             label="Deploy"
-            description="Push to Webflow Cloud"
+            description={getSiteId() ? "Push to Webflow Cloud" : "Select a site first"}
             onClick={props.onDeploy}
             loading={props.deployRunning}
             primary
           />
           <ActionButton
-            icon="▶"
-            label="Dev Server"
-            description="Run locally"
-            onClick={props.onDev}
-            loading={props.devRunning}
+            icon={props.devServerRunning ? "⏹" : "▶"}
+            label={props.devServerRunning ? "Stop Server" : "Dev Server"}
+            description={props.devServerRunning ? "Running on :4321" : "Run locally"}
+            onClick={props.onToggleDevServer}
+            active={props.devServerRunning}
           />
           <ActionButton
             icon="⚙"
@@ -1708,7 +2104,11 @@ const CloudSlateContent = (props: {
           />
         </div>
 
-        <TerminalOutputPanel output={props.commandOutput} error={props.error} />
+        <TerminalOutputPanel
+          output={props.commandOutput}
+          error={props.error}
+          streamTerminalId={props.streamTerminalId}
+        />
       </Show>
     </div>
   );
@@ -2006,14 +2406,27 @@ const ActionButton = (props: {
   onClick: () => void;
   loading?: boolean;
   primary?: boolean;
+  active?: boolean;
 }): JSXElement => {
+  const getBackground = () => {
+    if (props.primary) return "#4353ff";
+    if (props.active) return "#1a3a1a";
+    return "#2a2a2a";
+  };
+
+  const getBorder = () => {
+    if (props.primary) return "none";
+    if (props.active) return "1px solid #2d5a2d";
+    return "1px solid #444";
+  };
+
   return (
     <button
       onClick={props.onClick}
       disabled={props.loading}
       style={{
-        background: props.primary ? "#4353ff" : "#2a2a2a",
-        border: props.primary ? "none" : "1px solid #444",
+        background: getBackground(),
+        border: getBorder(),
         "border-radius": "8px",
         padding: "16px 20px",
         cursor: props.loading ? "wait" : "pointer",
@@ -2035,23 +2448,28 @@ const ActionButton = (props: {
           {props.loading ? "⏳" : props.icon}
         </span>
         <span
-          style={{ "font-size": "14px", "font-weight": 500, color: "#fff" }}
+          style={{ "font-size": "14px", "font-weight": 500, color: props.active ? "#4ade80" : "#fff" }}
         >
           {props.label}
         </span>
       </div>
-      <div style={{ "font-size": "12px", color: props.primary ? "rgba(255,255,255,0.7)" : "#888" }}>
+      <div style={{ "font-size": "12px", color: props.primary ? "rgba(255,255,255,0.7)" : props.active ? "#6ee7a0" : "#888" }}>
         {props.loading ? "Running..." : props.description}
       </div>
     </button>
   );
 };
 
-const TerminalOutputPanel = (props: { output: string | null; error: string | null }): JSXElement => {
+const TerminalOutputPanel = (props: {
+  output: string | null;
+  error: string | null;
+  streamTerminalId?: string | null;
+}): JSXElement => {
   let containerRef: HTMLDivElement | undefined;
   let terminal: Terminal | null = null;
   let fitAddon: FitAddon | null = null;
   let initialized = false;
+  let lastWrittenOutput = "";
 
   const initTerminal = () => {
     if (!containerRef || initialized) return;
@@ -2082,38 +2500,63 @@ const TerminalOutputPanel = (props: { output: string | null; error: string | nul
       const content = props.error || props.output;
       if (content && terminal) {
         terminal.write(content);
+        lastWrittenOutput = content;
       }
     });
   };
 
+  // Handle streaming terminal output
+  const handleTerminalOutput = (event: CustomEvent<{ terminalId: string; data: string }>) => {
+    const data = event.detail;
+    if (props.streamTerminalId && data.terminalId === props.streamTerminalId && terminal) {
+      terminal.write(data.data);
+      fitAddon?.fit();
+    }
+  };
+
   onMount(() => {
-    if (containerRef && (props.output || props.error)) {
+    if (containerRef && (props.output || props.error || props.streamTerminalId)) {
       initTerminal();
     }
+    // Subscribe to terminal output for streaming
+    window.addEventListener('terminalOutput', handleTerminalOutput as EventListener);
   });
 
-  // Update content when props change
+  // Update content when props change (for non-streaming output)
   createEffect(() => {
     const content = props.error || props.output;
     if (content) {
       if (!initialized && containerRef) {
         initTerminal();
-      } else if (terminal) {
-        terminal.clear();
-        terminal.write(content);
-        fitAddon?.fit();
+      } else if (terminal && content !== lastWrittenOutput) {
+        // Only clear and rewrite if content changed (for non-streaming)
+        if (!props.streamTerminalId) {
+          terminal.clear();
+          terminal.write(content);
+          lastWrittenOutput = content;
+          fitAddon?.fit();
+        }
       }
     }
   });
 
+  // Initialize terminal when streamTerminalId is set
+  createEffect(() => {
+    if (props.streamTerminalId && !initialized && containerRef) {
+      initTerminal();
+    }
+  });
+
   onCleanup(() => {
+    window.removeEventListener('terminalOutput', handleTerminalOutput as EventListener);
     terminal?.dispose();
     terminal = null;
     fitAddon = null;
     initialized = false;
+    lastWrittenOutput = "";
   });
 
-  const hasContent = () => props.output || props.error;
+  const hasContent = () => props.output || props.error || props.streamTerminalId;
 
   return (
     <div
