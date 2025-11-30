@@ -386,6 +386,120 @@ export async function activate(api: PluginAPI): Promise<void> {
     }
   };
 
+  // Share Code Components library with browser-based auth
+  const shareLibraryWithBrowserAuth = async (cwd: string) => {
+    api.log.info('=== shareLibraryWithBrowserAuth called ===');
+    api.log.info('Project directory: ' + cwd);
+
+    try {
+      api.notifications.showInfo('Sharing library to Webflow...');
+
+      // Use expect to handle interactive prompts like workspace selection
+      // Similar to startBrowserAuth, this handles the interactive CLI
+      // Note: We only auto-answer Yes/No confirmation prompts, NOT name/description prompts
+      // The name and description should be pre-configured in webflow.json
+      const expectScript = `
+        cd "${cwd}"
+        export WEBFLOW_TELEMETRY=false
+        export DO_NOT_TRACK=1
+        export WEBFLOW_SKIP_UPDATE_CHECKS=true
+        expect -c '
+          set timeout 300
+          spawn bunx @webflow/webflow-cli library share
+          expect {
+            -re "Select.*workspace" {
+              send "\\r"
+              exp_continue
+            }
+            -re "Select.*site" {
+              send "\\r"
+              exp_continue
+            }
+            -re "trusted and secure\\\\?" {
+              send "y\\r"
+              exp_continue
+            }
+            -re "Ready to (share|update).*\\\\?" {
+              send "y\\r"
+              exp_continue
+            }
+            -re "\\\\(Y/n\\\\)" {
+              send "y\\r"
+              exp_continue
+            }
+            -re "\\\\(y/N\\\\)" {
+              send "y\\r"
+              exp_continue
+            }
+            "Successfully" {
+              # Done - success
+            }
+            "shared" {
+              # Done - success
+            }
+            timeout {
+              puts "TIMEOUT"
+              exit 1
+            }
+            eof
+          }
+        '
+      `;
+
+      // Set initial state - share is in progress
+      api.state.set('shareLibraryStatus', {
+        status: 'running',
+        timestamp: Date.now(),
+      });
+
+      // Run without awaiting so browser can open
+      api.shell.exec(expectScript, {
+        cwd,
+        timeout: 310000, // 5+ minutes
+      }).then(result => {
+        api.log.info('Share command finished:', result.exitCode);
+        api.log.info('Output:', result.stdout);
+        if (result.stderr) {
+          api.log.warn('Stderr:', result.stderr);
+        }
+
+        if (result.exitCode === 0 && !result.stdout.toLowerCase().includes('error:')) {
+          api.notifications.showInfo('Library shared successfully!');
+          // Store result in state so slate can read it
+          api.state.set('shareLibraryStatus', {
+            status: 'success',
+            output: result.stdout,
+            timestamp: Date.now(),
+          });
+        } else {
+          api.notifications.showError('Failed to share library');
+          api.state.set('shareLibraryStatus', {
+            status: 'error',
+            error: result.stderr || result.stdout || 'Unknown error',
+            timestamp: Date.now(),
+          });
+        }
+      }).catch(e => {
+        api.log.error('Share library error:', e);
+        api.notifications.showError('Failed to share library: ' + (e instanceof Error ? e.message : String(e)));
+        api.state.set('shareLibraryStatus', {
+          status: 'error',
+          error: e instanceof Error ? e.message : 'Failed to share library',
+          timestamp: Date.now(),
+        });
+      });
+
+    } catch (e) {
+      api.log.error('Share library setup error:', e);
+      api.notifications.showError('Failed to start share: ' + (e instanceof Error ? e.message : String(e)));
+      api.state.set('shareLibraryStatus', {
+        status: 'error',
+        error: e instanceof Error ? e.message : 'Failed to share library',
+        timestamp: Date.now(),
+      });
+    }
+  };
+
   // Load token from project's .env file if it exists
   const loadEnvToken = async () => {
     try {
@@ -432,6 +546,12 @@ export async function activate(api: PluginAPI): Promise<void> {
     } else if (msg.type === 'loadEnvToken') {
       console.log('[Webflow] Handling loadEnvToken');
       await loadEnvToken();
+    } else if (msg.type === 'shareLibrary') {
+      console.log('[Webflow] Handling shareLibrary');
+      const cwd = (msg as { cwd?: string }).cwd;
+      if (cwd) {
+        await shareLibraryWithBrowserAuth(cwd);
+      }
     }
   });
   disposables.push(messageDisposable);

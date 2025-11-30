@@ -689,7 +689,8 @@ class PluginManager {
           options?: { cwd?: string; env?: Record<string, string>; timeout?: number }
         ) {
           const plugin = self.registry.plugins[pluginName];
-          const manifest = plugin?.manifest;
+          // Refresh manifest from disk to get latest entitlements (especially for local dev plugins)
+          const manifest = self.refreshPluginManifest(pluginName) || plugin?.manifest;
           if (!manifest?.entitlements?.process?.spawn) {
             console.error(`[Plugin:${pluginName}] shell.exec denied - no process.spawn entitlement. Manifest:`, manifest?.entitlements);
             throw new Error('Permission denied: process.spawn entitlement required');
@@ -1568,7 +1569,9 @@ class PluginManager {
     if (!plugin) return undefined;
 
     try {
-      const packageJsonPath = join(plugin.installPath, 'package.json');
+      // For local dev plugins, use localPath as the source of truth
+      const basePath = plugin.isLocal && plugin.localPath ? plugin.localPath : plugin.installPath;
+      const packageJsonPath = join(basePath, 'package.json');
       if (existsSync(packageJsonPath)) {
         const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
         const manifest: PluginManifest = packageJson['colab-plugin'] || {};

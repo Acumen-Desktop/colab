@@ -52,11 +52,15 @@ interface CodeComponentsConfig {
   // New structure with library key
   library?: {
     name: string;
+    description?: string;
+    id?: string; // Assigned by Webflow after first share
     components: string[];
     bundleConfig?: string;
   };
   // Legacy flat structure (for backwards compatibility)
   name?: string;
+  description?: string;
+  id?: string;
   version?: string;
   components?: string[];
   workspaceId?: string;
@@ -262,6 +266,47 @@ export const WebflowSlate = (props: WebflowSlateProps): JSXElement => {
     console.log('[WebflowSlate] Created/updated webflow.json');
   };
 
+  // Ensure telemetry is pre-configured in webflow.json to skip CLI prompts
+  const ensureTelemetryConfig = async (projectRoot: string) => {
+    const webflowJsonPath = projectRoot + '/webflow.json';
+
+    // Read existing webflow.json if it exists
+    let existing: any = {};
+    try {
+      const result = await electrobun.rpc?.request.readFile({ path: webflowJsonPath });
+      if (result?.textContent) {
+        existing = JSON.parse(result.textContent);
+      }
+    } catch (e) {
+      // File doesn't exist, that's fine
+    }
+
+    // Check if telemetry is already configured
+    if (existing.telemetry?.global?.allowTelemetry !== undefined) {
+      return; // Already configured, skip
+    }
+
+    // Add telemetry config to skip prompts
+    const webflowConfig = {
+      ...existing,
+      telemetry: {
+        ...existing.telemetry,
+        global: {
+          allowTelemetry: true,
+          lastPrompted: Date.now(),
+          version: "1.8.49", // Match CLI version
+        },
+      },
+    };
+
+    await electrobun.rpc?.request.writeFile({
+      path: webflowJsonPath,
+      value: JSON.stringify(webflowConfig, null, 2),
+    });
+
+    console.log('[WebflowSlate] Pre-configured telemetry in webflow.json');
+  };
+
   // Load config file content
   const loadConfig = async () => {
     if (!props.node?.path) return;
@@ -336,6 +381,43 @@ export const WebflowSlate = (props: WebflowSlateProps): JSXElement => {
         cmd,
         args,
         opts: { cwd, env },
+      }) as ExecResult | string;
+
+      // Handle both old string format and new object format
+      if (typeof result === "string") {
+        setCommandOutput(result);
+        return result;
+      }
+
+      // Combine stdout and stderr for display
+      const output = [result.stdout, result.stderr].filter(Boolean).join("\n");
+      setCommandOutput(output);
+
+      // If command failed, also set error
+      if (result.exitCode !== 0 && result.stderr) {
+        setError(result.stderr);
+      }
+
+      return output;
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      setError(errMsg);
+      throw e;
+    }
+  };
+
+  // Run a terminal command with env vars and stdin input (for answering prompts)
+  const runCommandWithEnvAndInput = async (cmd: string, args: string[], env: Record<string, string>, input: string): Promise<string> => {
+    const cwd = getProjectRoot();
+    if (!cwd) {
+      throw new Error("Could not determine project directory");
+    }
+
+    try {
+      const result = await electrobun.rpc?.request.execSpawnSync({
+        cmd,
+        args,
+        opts: { cwd, env, input },
       }) as ExecResult | string;
 
       // Handle both old string format and new object format
@@ -535,30 +617,96 @@ export const WebflowSlate = (props: WebflowSlateProps): JSXElement => {
   };
 
   // Code Components: Share library to Webflow
+  // This triggers the main process to run the CLI with browser auth like DevLink does
   const shareLibrary = async () => {
     setShareRunning(true);
     setCommandOutput(null);
     setError(null);
-    try {
-      // Code Components requires a workspace-scoped token
-      const workspaceToken = getWorkspaceToken();
 
-      if (!workspaceToken) {
-        setError("No workspace token found. Code Components requires a workspace-scoped OAuth token.\n\nGo to Settings → Webflow and click 'Connect with Webflow' to authenticate with workspace access.");
-        return;
+    // Track the timestamp when we started so we only react to new status updates
+    const startTime = Date.now();
+
+    try {
+      const cwd = getProjectRoot();
+      if (!cwd) {
+        throw new Error("Could not determine project directory");
       }
 
-      const envVars: Record<string, string> = {
-        // Disable telemetry prompt
-        WEBFLOW_TELEMETRY: 'false',
-        DO_NOT_TRACK: '1',
-        // Workspace token for Code Components
-        WEBFLOW_API_TOKEN: workspaceToken,
+      // First, ensure telemetry is pre-configured in webflow.json to skip prompts
+      await ensureTelemetryConfig(cwd);
+
+      setCommandOutput("Starting library share...\nA browser window will open for authentication if needed.");
+
+      // Send message to plugin to run the share command (like startBrowserAuth)
+      await electrobun.rpc?.request.pluginSendSettingsMessage({
+        pluginName: PLUGIN_NAME,
+        message: { type: 'shareLibrary', cwd },
+      });
+
+      // Poll plugin state for the result
+      let attempts = 0;
+      const maxAttempts = 180; // 3 minutes at 1 second intervals
+
+      const pollForStatus = async () => {
+        attempts++;
+        try {
+          const status = await electrobun.rpc?.request.pluginGetStateValue({
+            pluginName: PLUGIN_NAME,
+            key: 'shareLibraryStatus',
+          }) as { status: string; output?: string; error?: string; timestamp?: number } | undefined;
+
+          console.log('[WebflowSlate] Share status:', status);
+
+          // Only process if the status is newer than when we started
+          if (status && status.timestamp && status.timestamp > startTime) {
+            if (status.status === 'running') {
+              setCommandOutput("Sharing library to Webflow...\nThis may take a moment.");
+            } else if (status.status === 'success') {
+              // Clean up the output - remove expect noise (the 'y' responses and spawn line)
+              let output = status.output || '';
+              // Remove the spawn line
+              output = output.replace(/^spawn bunx @webflow\/webflow-cli library share\n?/m, '');
+              // Remove stray 'y' lines from expect auto-responses
+              output = output.replace(/^y\n/gm, '');
+              // Remove deprecation warnings
+              output = output.replace(/\(node:\d+\).*DeprecationWarning.*\n?/g, '');
+              output = output.replace(/\(Use `node --trace-deprecation.*\n?/g, '');
+              // Clean up any double newlines
+              output = output.replace(/\n{3,}/g, '\n\n');
+              output = output.trim();
+
+              setCommandOutput(`✓ Library shared successfully!\n\n${output}`);
+              setShareRunning(false);
+              return; // Stop polling
+            } else if (status.status === 'error') {
+              setError(status.error || 'Failed to share library');
+              setCommandOutput(null);
+              setShareRunning(false);
+              return; // Stop polling
+            }
+          }
+
+          // Continue polling if we haven't hit max attempts
+          if (attempts < maxAttempts && shareRunning()) {
+            setTimeout(pollForStatus, 1000);
+          } else if (attempts >= maxAttempts) {
+            setCommandOutput("Share command is still running in the background.\nCheck your system notifications for results.");
+            setShareRunning(false);
+          }
+        } catch (e) {
+          console.error('[WebflowSlate] Error polling for status:', e);
+          if (attempts < maxAttempts && shareRunning()) {
+            setTimeout(pollForStatus, 1000);
+          }
+        }
       };
 
-      // Use bunx which auto-installs if needed (npx requires npm install first)
-      await runCommandWithEnv("bunx", ["@webflow/webflow-cli", "library", "share", "--no-input"], envVars);
-    } finally {
+      // Start polling after a short delay
+      setTimeout(pollForStatus, 500);
+
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      setError(errMsg);
       setShareRunning(false);
     }
   };
@@ -633,6 +781,40 @@ export const WebflowSlate = (props: WebflowSlateProps): JSXElement => {
       await stopDevServer();
     } else {
       await startDevServer();
+    }
+  };
+
+  // Update Code Components config (webflow.json)
+  const updateCodeComponentsConfig = async (key: string, value: string) => {
+    const configPath = props.node?.path;
+    if (!configPath) return;
+
+    try {
+      // Read current config
+      const result = await electrobun.rpc?.request.readFile({ path: configPath });
+      if (!result?.textContent) return;
+
+      const currentConfig = JSON.parse(result.textContent);
+
+      // Update the appropriate field
+      // The webflow.json can have either a "library" object or flat structure
+      if (currentConfig.library) {
+        currentConfig.library[key] = value;
+      } else {
+        currentConfig[key] = value;
+      }
+
+      // Write back
+      await electrobun.rpc?.request.writeFile({
+        path: configPath,
+        value: JSON.stringify(currentConfig, null, 2),
+      });
+
+      // Update local config state
+      setConfig(currentConfig);
+    } catch (e) {
+      console.error('[WebflowSlate] Failed to update config:', e);
+      setError(`Failed to update config: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
@@ -759,6 +941,7 @@ export const WebflowSlate = (props: WebflowSlateProps): JSXElement => {
               onShare={shareLibrary}
               onToggleDevServer={toggleDevServer}
               onOpenDashboard={openWebflowDashboard}
+              onConfigChange={updateCodeComponentsConfig}
               shareRunning={shareRunning()}
               bundleRunning={bundleRunning()}
               devServerRunning={devServerRunning()}
@@ -1167,6 +1350,7 @@ const CodeComponentsSlateContent = (props: {
   onShare: () => Promise<void>;
   onToggleDevServer: () => Promise<void>;
   onOpenDashboard: () => void;
+  onConfigChange: (key: string, value: string) => Promise<void>;
   shareRunning: boolean;
   bundleRunning: boolean;
   devServerRunning: boolean;
@@ -1255,7 +1439,36 @@ const CodeComponentsSlateContent = (props: {
             Library Info
           </h3>
 
-          <ConfigField label="Name" value={props.config?.library?.name || props.config?.name} />
+          <EditableConfigField
+            label="Name"
+            value={props.config?.library?.name || props.config?.name}
+            placeholder="Enter library name..."
+            onChange={(value) => props.onConfigChange("name", value)}
+          />
+          <EditableConfigField
+            label="Description"
+            value={props.config?.library?.description || (props.config as any)?.description}
+            placeholder="Enter library description..."
+            multiline
+            onChange={(value) => props.onConfigChange("description", value)}
+          />
+          <EditableConfigField
+            label="Library ID"
+            value={props.config?.library?.id || (props.config as any)?.id}
+            placeholder="Assigned after first share..."
+            mono
+            validate={(value) => {
+              // Convert to slug: lowercase, replace spaces with hyphens, remove invalid chars
+              return value
+                .toLowerCase()
+                .trim()
+                .replace(/\s+/g, '-')
+                .replace(/[^a-z0-9-]/g, '')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '');
+            }}
+            onChange={(value) => props.onConfigChange("id", value)}
+          />
           <Show when={props.config?.version}>
             <ConfigField label="Version" value={props.config?.version} />
           </Show>
@@ -1627,6 +1840,139 @@ const ConfigField = (props: { label: string; value?: string; mono?: boolean }): 
     </div>
   </Show>
 );
+
+// Editable config field with inline editing
+const EditableConfigField = (props: {
+  label: string;
+  value?: string;
+  placeholder?: string;
+  mono?: boolean;
+  multiline?: boolean;
+  validate?: (value: string) => string; // Transform/validate input before saving
+  onChange: (value: string) => void;
+}): JSXElement => {
+  const [editing, setEditing] = createSignal(false);
+  const [localValue, setLocalValue] = createSignal(props.value || "");
+
+  // Update local value when props change
+  createEffect(() => {
+    setLocalValue(props.value || "");
+  });
+
+  const handleSave = () => {
+    let value = localValue();
+    if (props.validate) {
+      value = props.validate(value);
+      setLocalValue(value); // Update local value with validated version
+    }
+    props.onChange(value);
+    setEditing(false);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Enter" && !props.multiline) {
+      handleSave();
+    } else if (e.key === "Escape") {
+      setLocalValue(props.value || "");
+      setEditing(false);
+    }
+  };
+
+  return (
+    <div style={{ "margin-bottom": "12px" }}>
+      <label style={{ "font-size": "12px", color: "#888", display: "block", "margin-bottom": "4px" }}>
+        {props.label}
+      </label>
+      <Show
+        when={editing()}
+        fallback={
+          <div
+            onClick={() => setEditing(true)}
+            style={{
+              background: "#1e1e1e",
+              padding: "8px 12px",
+              "border-radius": "4px",
+              "font-family": props.mono ? "monospace" : "inherit",
+              "font-size": "13px",
+              color: props.value ? "#d9d9d9" : "#666",
+              cursor: "pointer",
+              border: "1px solid transparent",
+              transition: "border-color 0.2s",
+              "min-height": props.multiline ? "60px" : "auto",
+              "white-space": props.multiline ? "pre-wrap" : "nowrap",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#4353ff")}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "transparent")}
+          >
+            {props.value || props.placeholder || "Click to edit..."}
+          </div>
+        }
+      >
+        <div style={{ display: "flex", gap: "8px", "align-items": "flex-start" }}>
+          <Show
+            when={props.multiline}
+            fallback={
+              <input
+                type="text"
+                value={localValue()}
+                onInput={(e) => setLocalValue(e.currentTarget.value)}
+                onKeyDown={handleKeyDown}
+                onBlur={handleSave}
+                autofocus
+                style={{
+                  flex: 1,
+                  background: "#1e1e1e",
+                  border: "1px solid #4353ff",
+                  "border-radius": "4px",
+                  padding: "8px 12px",
+                  "font-family": props.mono ? "monospace" : "inherit",
+                  "font-size": "13px",
+                  color: "#d9d9d9",
+                  outline: "none",
+                }}
+              />
+            }
+          >
+            <textarea
+              value={localValue()}
+              onInput={(e) => setLocalValue(e.currentTarget.value)}
+              onKeyDown={handleKeyDown}
+              onBlur={handleSave}
+              autofocus
+              style={{
+                flex: 1,
+                background: "#1e1e1e",
+                border: "1px solid #4353ff",
+                "border-radius": "4px",
+                padding: "8px 12px",
+                "font-family": props.mono ? "monospace" : "inherit",
+                "font-size": "13px",
+                color: "#d9d9d9",
+                outline: "none",
+                resize: "vertical",
+                "min-height": "60px",
+              }}
+            />
+          </Show>
+          <button
+            onClick={handleSave}
+            style={{
+              background: "#4353ff",
+              border: "none",
+              "border-radius": "4px",
+              padding: "8px 12px",
+              color: "#fff",
+              cursor: "pointer",
+              "font-size": "12px",
+            }}
+          >
+            Save
+          </button>
+        </div>
+      </Show>
+    </div>
+  );
+};
 
 const ActionButton = (props: {
   icon: string;

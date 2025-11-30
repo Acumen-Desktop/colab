@@ -293,6 +293,31 @@ export const getSlateForNode = (
     // you could add more here
   }
 
+  // Check for plugin slates (e.g., webflow.json, .webflowrc.json)
+  // Use inline check since findPluginSlateForFile is defined later in the file
+  if (node.type === "file" && node.path) {
+    const pluginSlates = state.pluginSlates;
+    if (pluginSlates && pluginSlates.length > 0) {
+      const filename = node.path.split("/").pop() || "";
+      for (const slate of pluginSlates) {
+        if (slate.folderHandler) continue;
+        for (const pattern of slate.patterns) {
+          if (pattern === filename || (pattern.startsWith("*.") && filename.endsWith(pattern.slice(1)))) {
+            // Return a slate-like object so the context menu knows this file has a slate
+            return {
+              v: 1,
+              name: slate.name,
+              type: "plugin" as const,
+              icon: slate.icon || "",
+              pluginSlateId: slate.id,
+              pluginName: slate.pluginName,
+            };
+          }
+        }
+      }
+    }
+  }
+
   // return node.type;
 };
 
