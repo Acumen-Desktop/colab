@@ -619,9 +619,18 @@ export const WebflowSlate = (props: WebflowSlateProps): JSXElement => {
   // Code Components: Share library to Webflow
   // This triggers the main process to run the CLI with browser auth like DevLink does
   const shareLibrary = async () => {
-    setShareRunning(true);
     setCommandOutput(null);
     setError(null);
+
+    // Validate: Library ID is required
+    const currentConfig = config() as CodeComponentsConfig | null;
+    const libraryId = currentConfig?.library?.id || currentConfig?.id;
+    if (!libraryId || !libraryId.trim()) {
+      setError("Library ID is required. Please set a Library ID before sharing.");
+      return;
+    }
+
+    setShareRunning(true);
 
     // Track the timestamp when we started so we only react to new status updates
     const startTime = Date.now();
@@ -799,9 +808,18 @@ export const WebflowSlate = (props: WebflowSlateProps): JSXElement => {
       // Update the appropriate field
       // The webflow.json can have either a "library" object or flat structure
       if (currentConfig.library) {
-        currentConfig.library[key] = value;
+        if (value) {
+          currentConfig.library[key] = value;
+        } else {
+          // Remove empty values (CLI doesn't like empty strings for id)
+          delete currentConfig.library[key];
+        }
       } else {
-        currentConfig[key] = value;
+        if (value) {
+          currentConfig[key] = value;
+        } else {
+          delete currentConfig[key];
+        }
       }
 
       // Write back
@@ -1455,19 +1473,26 @@ const CodeComponentsSlateContent = (props: {
           <EditableConfigField
             label="Library ID"
             value={props.config?.library?.id || (props.config as any)?.id}
-            placeholder="Assigned after first share..."
+            placeholder="e.g. my-library-1"
             mono
             validate={(value) => {
               // Convert to slug: lowercase, replace spaces with hyphens, remove invalid chars
-              return value
+              let slug = value
                 .toLowerCase()
                 .trim()
                 .replace(/\s+/g, '-')
                 .replace(/[^a-z0-9-]/g, '')
                 .replace(/-+/g, '-')
                 .replace(/^-|-$/g, '');
+              // If empty after validation, don't save (return original to prevent empty)
+              return slug || value;
             }}
-            onChange={(value) => props.onConfigChange("id", value)}
+            onChange={(value) => {
+              // Don't save empty IDs - CLI requires at least 1 character
+              if (value && value.trim()) {
+                props.onConfigChange("id", value);
+              }
+            }}
           />
           <Show when={props.config?.version}>
             <ConfigField label="Version" value={props.config?.version} />

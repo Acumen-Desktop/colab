@@ -431,11 +431,34 @@ export async function activate(api: PluginAPI): Promise<void> {
               send "y\\r"
               exp_continue
             }
+            -re "Yes/No" {
+              send "Yes\\r"
+              exp_continue
+            }
+            -re "\\\\? Yes" {
+              # Already answered, continue
+              exp_continue
+            }
             "Successfully" {
               # Done - success
             }
-            "shared" {
+            "shared successfully" {
               # Done - success
+            }
+            "ERROR:" {
+              # Error occurred, let it finish
+            }
+            -re "Waiting for authentication" {
+              # Browser auth in progress, keep waiting
+              exp_continue
+            }
+            -re "https://" {
+              # URL being shown (e.g., browser auth URL), continue
+              exp_continue
+            }
+            -re "Compiling|Uploading|Creating|Collecting" {
+              # Progress indicators, continue waiting
+              exp_continue
             }
             timeout {
               puts "TIMEOUT"
@@ -660,22 +683,23 @@ export async function activate(api: PluginAPI): Promise<void> {
       const { statSync } = await import('fs');
       const { join, dirname } = await import('path');
 
-      let targetDir = ctx.filePath;
+      let parentDir = ctx.filePath;
       try {
         const stat = statSync(ctx.filePath);
         if (!stat.isDirectory()) {
-          targetDir = dirname(ctx.filePath);
+          parentDir = dirname(ctx.filePath);
         }
       } catch {
-        targetDir = dirname(ctx.filePath);
+        parentDir = dirname(ctx.filePath);
       }
 
-      // Check if already initialized
+      // Create a "devlink" folder inside the target directory (with unique suffix if needed)
+      const folderName = api.utils.getUniqueNewName(parentDir, 'devlink');
+      const targetDir = join(parentDir, folderName);
       const configPath = join(targetDir, '.webflowrc.json');
-      if (existsSync(configPath)) {
-        api.notifications.showWarning('DevLink is already initialized in this directory');
-        return;
-      }
+
+      // Create the devlink folder
+      mkdirSync(targetDir, { recursive: true });
 
       // Check authentication
       const tokens = api.state.get<WebflowToken[]>('tokens') || [];
@@ -889,23 +913,24 @@ export async function activate(api: PluginAPI): Promise<void> {
       const { statSync } = await import('fs');
       const { join, dirname, basename } = await import('path');
 
-      // Get the directory path
-      let targetDir = ctx.filePath;
+      // Get the directory path where user right-clicked
+      let parentDir = ctx.filePath;
       try {
         const stat = statSync(ctx.filePath);
         if (!stat.isDirectory()) {
-          targetDir = dirname(ctx.filePath);
+          parentDir = dirname(ctx.filePath);
         }
       } catch {
-        targetDir = dirname(ctx.filePath);
+        parentDir = dirname(ctx.filePath);
       }
 
-      // Check if already initialized
+      // Create a "code-components" folder inside the target directory (with unique suffix if needed)
+      const folderName = api.utils.getUniqueNewName(parentDir, 'code-components');
+      const targetDir = join(parentDir, folderName);
       const configPath = join(targetDir, 'webflow.json');
-      if (existsSync(configPath)) {
-        api.notifications.showWarning('Code Components library already initialized in this directory');
-        return;
-      }
+
+      // Create the code-components folder
+      mkdirSync(targetDir, { recursive: true });
 
       // Check authentication
       const tokens = api.state.get<WebflowToken[]>('tokens') || [];
@@ -916,9 +941,12 @@ export async function activate(api: PluginAPI): Promise<void> {
         return;
       }
 
+      // Find a workspace-scoped token (oauth or workspace type) for Code Components
+      const workspaceToken = tokens.find(t => t.status === 'valid' && (t.type === 'oauth' || t.type === 'workspace'));
+
       // Create webflow.json config file with the correct "library" structure
-      // Sanitize project name - remove hyphens and special chars (causes Module Federation errors)
-      const rawProjectName = basename(targetDir);
+      // Use parent folder name for the library name (sanitized)
+      const rawProjectName = basename(parentDir);
       const projectName = rawProjectName
         .replace(/[^a-zA-Z0-9]/g, ' ')  // Replace special chars with spaces
         .split(' ')
@@ -935,77 +963,177 @@ export async function activate(api: PluginAPI): Promise<void> {
       };
       writeFileSync(configPath, JSON.stringify(config, null, 2));
 
+      // Note: We don't automatically add the workspace token to .env for Code Components
+      // because the CLI requires specific OAuth scopes that may differ from workspace API tokens.
+      // The CLI will prompt for browser auth on first share, which ensures correct scopes.
+      // The CLI then stores its own token in .env after successful auth.
+
+      // Add .env to .gitignore preemptively (CLI will create it after auth)
+      const gitignorePath = join(targetDir, '.gitignore');
+      try {
+        let gitignore = '';
+        if (existsSync(gitignorePath)) {
+          gitignore = readFileSync(gitignorePath, 'utf-8');
+        }
+        if (!gitignore.includes('.env')) {
+          const addition = '\n# Environment variables (contains API tokens)\n.env\n';
+          writeFileSync(gitignorePath, gitignore + addition);
+        }
+      } catch (e) {
+        api.log.warn('Could not update .gitignore:', e);
+      }
+
       // Create src/components directory structure
       const componentsDir = join(targetDir, 'src', 'components');
       if (!existsSync(componentsDir)) {
         mkdirSync(componentsDir, { recursive: true });
       }
 
-      // Create an example React component file
-      const exampleReactPath = join(componentsDir, 'ExampleButton.tsx');
-      if (!existsSync(exampleReactPath)) {
-        const exampleReact = `import React from 'react';
+      // Create the "Built with Colab" badge component
+      const badgeReactPath = join(componentsDir, 'ColabBadge.tsx');
+      if (!existsSync(badgeReactPath)) {
+        const badgeReact = `import React, { useState, useRef, useEffect } from 'react';
 
-// Example React Component for Webflow Code Components
-// See: https://developers.webflow.com/code-components
+// "Built with Colab" Badge Component
+// A stylish black & white button with animated blob hover effect
 
-interface ExampleButtonProps {
-  label?: string;
-  variant?: 'primary' | 'secondary';
+interface ColabBadgeProps {
+  text?: string;
+  size?: 'small' | 'medium' | 'large';
 }
 
-export const ExampleButton: React.FC<ExampleButtonProps> = ({
-  label = 'Click me',
-  variant = 'primary',
+export const ColabBadge: React.FC<ColabBadgeProps> = ({
+  text = 'Built with Colab',
+  size = 'medium',
 }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
+  const buttonRef = useRef<HTMLAnchorElement>(null);
+
+  const sizes = {
+    small: { padding: '8px 16px', fontSize: '12px', blobSize: 60 },
+    medium: { padding: '12px 24px', fontSize: '14px', blobSize: 80 },
+    large: { padding: '16px 32px', fontSize: '16px', blobSize: 100 },
+  };
+
+  const { padding, fontSize, blobSize } = sizes[size];
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setMousePos({
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
+    });
+  };
+
   return (
-    <button
+    <a
+      ref={buttonRef}
+      href="https://blackboard.sh"
+      target="_blank"
+      rel="noopener noreferrer"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onMouseMove={handleMouseMove}
       style={{
-        padding: '12px 24px',
-        borderRadius: '8px',
-        border: 'none',
-        cursor: 'pointer',
-        fontSize: '14px',
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding,
+        fontSize,
         fontWeight: 600,
-        backgroundColor: variant === 'primary' ? '#4353ff' : '#e5e5e5',
-        color: variant === 'primary' ? '#fff' : '#333',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        color: isHovered ? '#000' : '#fff',
+        backgroundColor: '#000',
+        border: '2px solid #fff',
+        borderRadius: '50px',
+        cursor: 'pointer',
+        textDecoration: 'none',
+        overflow: 'hidden',
+        transition: 'color 0.3s ease, border-color 0.3s ease',
       }}
     >
-      {label}
-    </button>
+      {/* Animated blob background */}
+      <span
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: \`radial-gradient(circle \${blobSize}px at \${mousePos.x * 100}% \${mousePos.y * 100}%, #fff 0%, transparent 70%)\`,
+          opacity: isHovered ? 1 : 0,
+          transition: 'opacity 0.3s ease',
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* Colab logo */}
+      <svg
+        width={size === 'small' ? 16 : size === 'medium' ? 20 : 24}
+        height={size === 'small' ? 16 : size === 'medium' ? 20 : 24}
+        viewBox="0 0 24 24"
+        fill="none"
+        style={{ position: 'relative', zIndex: 1 }}
+      >
+        <rect
+          x="3"
+          y="3"
+          width="18"
+          height="18"
+          rx="4"
+          stroke="currentColor"
+          strokeWidth="2"
+          fill="none"
+        />
+        <circle cx="8" cy="12" r="2" fill="currentColor" />
+        <circle cx="16" cy="12" r="2" fill="currentColor" />
+        <path
+          d="M8 12h8"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      </svg>
+
+      {/* Text */}
+      <span style={{ position: 'relative', zIndex: 1 }}>{text}</span>
+    </a>
   );
 };
 `;
-        writeFileSync(exampleReactPath, exampleReact);
+        writeFileSync(badgeReactPath, badgeReact);
       }
 
       // Create the Webflow component declaration file
-      const exampleComponentPath = join(componentsDir, 'ExampleButton.webflow.tsx');
-      if (!existsSync(exampleComponentPath)) {
-        const exampleComponent = `import { ExampleButton } from './ExampleButton';
+      const badgeComponentPath = join(componentsDir, 'ColabBadge.webflow.tsx');
+      if (!existsSync(badgeComponentPath)) {
+        const badgeComponent = `import { ColabBadge } from './ColabBadge';
 import { props } from '@webflow/data-types';
 import { declareComponent } from '@webflow/react';
 
-// Webflow Code Component declaration
-// This maps the React component to Webflow with prop controls
+// "Built with Colab" Badge - Webflow Code Component
+// A stylish badge linking to blackboard.sh with animated hover effect
 
-export default declareComponent(ExampleButton, {
-  name: 'ExampleButton',
-  description: 'A customizable button component',
+export default declareComponent(ColabBadge, {
+  name: 'ColabBadge',
+  description: 'A "Built with Colab" badge with animated hover effect',
   props: {
-    label: props.Text({
-      name: 'Label',
-      defaultValue: 'Click me',
+    text: props.Text({
+      name: 'Text',
+      defaultValue: 'Built with Colab',
     }),
-    variant: props.Variant({
-      name: 'Variant',
-      options: ['primary', 'secondary'],
-      defaultValue: 'primary',
+    size: props.Variant({
+      name: 'Size',
+      options: ['small', 'medium', 'large'],
+      defaultValue: 'medium',
     }),
   },
 });
 `;
-        writeFileSync(exampleComponentPath, exampleComponent);
+        writeFileSync(badgeComponentPath, badgeComponent);
       }
 
       // Update or create package.json
@@ -1065,7 +1193,7 @@ export default declareComponent(ExampleButton, {
         api.log.warn(`Failed to run bun install: ${err}`);
       }
 
-      api.notifications.showInfo(`Code Components library initialized! Click on webflow.json to manage.`);
+      api.notifications.showInfo(`Code Components library initialized in code-components folder! Click on webflow.json to manage.`);
       api.log.info(`Code Components library initialized in ${targetDir}`);
     }
   );

@@ -863,6 +863,18 @@ export interface PluginAPI {
      */
     openUrl(url: string): void;
   };
+
+  /** Utility functions */
+  utils: {
+    /**
+     * Get a unique name for a new file/folder in a directory
+     * If baseName already exists, returns "1-baseName", "2-baseName", etc.
+     * @param parentPath - Parent directory path
+     * @param baseName - Desired base name
+     * @returns A unique name that doesn't conflict with existing entries
+     */
+    getUniqueNewName(parentPath: string, baseName: string): string;
+  };
 }
 
 /** Handle to update or dispose a status bar item */

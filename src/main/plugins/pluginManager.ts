@@ -14,6 +14,7 @@ import {
   RG_BINARY_PATH,
 } from '../consts/paths';
 import { execSpawnSync } from '../utils/processUtils';
+import { getUniqueNewName } from '../utils/fileUtils';
 import type {
   InstalledPlugin,
   PluginManifest,
@@ -1108,6 +1109,11 @@ class PluginManager {
         openUrl(url: string) {
           // Broadcast to all windows to open a web tab with this URL
           broadcastToAllWindows('openUrlInNewTab', { url });
+        },
+      },
+      utils: {
+        getUniqueNewName(parentPath: string, baseName: string): string {
+          return getUniqueNewName(parentPath, baseName);
         },
       },
     } as PluginAPI;
