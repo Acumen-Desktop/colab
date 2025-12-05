@@ -207,7 +207,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     # Only publish for stable releases (not canary)
-    if: ${{ !contains(github.ref, '-canary') }}
+    if: ${{ contains(github.ref, '-canary') }}
 
     steps:
       - name: Checkout code
