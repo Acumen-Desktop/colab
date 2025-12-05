@@ -357,6 +357,22 @@ const CommandPalette = ({ setOpen }: { setOpen: (value: boolean) => void }) => {
     });
   };
 
+  const pluginsClick = () => {
+    setState("settingsPane", {
+      type:
+        state.settingsPane.type === "plugin-marketplace" ? "" : "plugin-marketplace",
+      data: {},
+    });
+  };
+
+  const llamaSettingsClick = () => {
+    setState("settingsPane", {
+      type:
+        state.settingsPane.type === "llama-settings" ? "" : "llama-settings",
+      data: {},
+    });
+  };
+
   const filterCommands = () => {
     const query = state.commandPalette.query;
     const queryRegex = new RegExp(query.split("").join(".*"), "i");
@@ -365,8 +381,10 @@ const CommandPalette = ({ setOpen }: { setOpen: (value: boolean) => void }) => {
     const allWorkspaceCommands = [
       { name: "New Window", description: "Open a new window", action: () => electrobun.rpc?.send.createWindow() },
       { name: "Hide Workspace", description: "Hide the current workspace", action: () => electrobun.rpc?.send.hideWorkspace() },
-      { name: "Workspace Settings", description: "Configure workspace settings", action: workspaceSettingsClick },
+      { name: "Plugins", description: "Browse and manage plugins", action: pluginsClick },
+      { name: "Llama Settings", description: "Configure local AI model", action: llamaSettingsClick },
       { name: "Colab Settings", description: "Configure global Colab settings", action: globalSettingsClick },
+      { name: "Workspace Settings", description: "Configure workspace settings", action: workspaceSettingsClick },
       { name: "New Workspace", description: "Create a new workspace", action: () => electrobun.rpc?.send.createWorkspace() },
       {
         name: "Format Document",

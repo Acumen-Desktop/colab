@@ -458,6 +458,11 @@ function updateApplicationMenu() {
       submenu: [
         {
           type: "normal",
+          label: "Plugins",
+          action: "plugin-marketplace",
+        },
+        {
+          type: "normal",
           label: "Llama Settings",
           action: "llama-settings",
         },
@@ -560,6 +565,8 @@ ApplicationMenu.on("application-menu-clicked", (e) => {
     sendToFocusedWindow("openCommandPalette", {});
   } else if (action === "new-browser-tab") {
     sendToFocusedWindow("newBrowserTab", {});
+  } else if (action === "plugin-marketplace") {
+    sendToFocusedWindow("openSettings", { settingsType: "plugin-marketplace" });
   } else if (action === "llama-settings") {
     sendToFocusedWindow("openSettings", { settingsType: "llama-settings" });
   } else if (action === "colab-settings") {
