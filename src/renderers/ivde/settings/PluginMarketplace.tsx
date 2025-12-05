@@ -6,7 +6,7 @@ import {
   createEffect,
   onMount,
 } from "solid-js";
-import { setState } from "../store";
+import { setState, openNewTabForNode } from "../store";
 import { electrobun } from "../init";
 import {
   SettingsPaneFormSection,
@@ -337,6 +337,32 @@ export const PluginMarketplace = (): JSXElement => {
               outline: "none",
             }}
           />
+          <div
+            style={{
+              "margin-top": "8px",
+              "font-size": "11px",
+              color: "#888",
+            }}
+          >
+            You can write and publish your own plugins.{" "}
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setState("settingsPane", { type: "", data: {} });
+                openNewTabForNode("__COLAB_INTERNAL__/web", false, {
+                  url: "https://blackboard.sh/colab/docs/plugins/overview/",
+                  focusNewTab: true,
+                });
+              }}
+              style={{
+                color: "#6bb5ff",
+                "text-decoration": "none",
+              }}
+            >
+              Read the docs
+            </a>
+          </div>
         </div>
       </Show>
 
