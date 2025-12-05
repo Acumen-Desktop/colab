@@ -133,11 +133,12 @@ export const TopBar = () => {
       {/* Colab Cloud button */}
       <div
         style="font-size: 13px; margin: 8px 4px; cursor: pointer; display: flex; align-items: center; gap: 4px; background: #2d4a3e; border-radius: 4px; padding: 2px 8px;"
-        title="Open Colab Cloud dashboard"
+        title="Open Colab Cloud settings"
         onClick={() => {
-          const isDev = state.buildVars.channel === "dev";
-          const cloudUrl = isDev ? "http://127.0.0.1:8788/dashboard" : "https://cloud.blackboard.sh/dashboard";
-          openNewTabForNode("__COLAB_INTERNAL__/web", false, { url: cloudUrl });
+          setState("settingsPane", {
+            type: state.settingsPane.type === "colab-cloud-settings" ? "" : "colab-cloud-settings",
+            data: {},
+          });
         }}
       >
         <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2">
