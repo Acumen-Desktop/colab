@@ -61,7 +61,7 @@ export async function searchPlugins(options: SearchOptions = {}): Promise<{
 
   const data: NpmSearchResult = await response.json();
 
-  const results: SearchResultItem[] = data.objects.map((obj) => ({
+  let results: SearchResultItem[] = data.objects.map((obj) => ({
     name: obj.package.name,
     version: obj.package.version,
     description: obj.package.description,
@@ -72,9 +72,27 @@ export async function searchPlugins(options: SearchOptions = {}): Promise<{
     hasColabPlugin: obj.package.keywords?.includes('colab-plugin') ?? false,
   }));
 
+  // If there's a search query, filter results to only include packages where
+  // the query appears in the name, description, or keywords.
+  // npm's fuzzy search returns low-relevance results when the result set is small.
+  if (query) {
+    const lowerQuery = query.toLowerCase();
+    results = results.filter((pkg) => {
+      const searchableText = [
+        pkg.name,
+        pkg.description,
+        ...(pkg.keywords || []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return searchableText.includes(lowerQuery);
+    });
+  }
+
   return {
     results,
-    total: data.total,
+    total: results.length,
   };
 }
 
