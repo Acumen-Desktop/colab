@@ -101,11 +101,47 @@ export const TerminalSlate = ({ tabId }: { tabId: string }) => {
       fitAddon = new FitAddon();
       terminal.loadAddon(fitAddon);
       
-      // Add web links addon with handler to open URLs in new web tabs
-      const webLinksAddon = new WebLinksAddon((event: MouseEvent, uri: string) => {
-        event.preventDefault();
-        openNewTabForNode('__COLAB_INTERNAL__/web', false, { focusNewTab: true, url: uri });
-      });
+      // Add web links addon - require Alt+click or Cmd+click to open URLs
+      const webLinksAddon = new WebLinksAddon(
+        (event: MouseEvent, uri: string) => {
+          // Only open if Alt or Cmd/Meta is held
+          if (event.altKey || event.metaKey) {
+            event.preventDefault();
+            openNewTabForNode('__COLAB_INTERNAL__/web', false, { focusNewTab: true, url: uri });
+          }
+        },
+        {
+          hover: (event: MouseEvent, uri: string, range) => {
+            // Show tooltip explaining how to open the link
+            const tooltip = document.createElement('div');
+            tooltip.className = 'colab-link-tooltip';
+            tooltip.textContent = `⌘+click or ⌥+click to open: ${uri.length > 50 ? uri.slice(0, 50) + '...' : uri}`;
+            tooltip.style.cssText = `
+              position: fixed;
+              left: ${event.clientX + 10}px;
+              top: ${event.clientY + 10}px;
+              background: #1e1e1e;
+              color: #ccc;
+              padding: 4px 8px;
+              border-radius: 4px;
+              font-size: 12px;
+              z-index: 10000;
+              pointer-events: none;
+              border: 1px solid #444;
+              max-width: 400px;
+              word-break: break-all;
+            `;
+            document.body.appendChild(tooltip);
+
+            // Remove tooltip when mouse leaves
+            const removeTooltip = () => {
+              tooltip.remove();
+              event.target?.removeEventListener('mouseleave', removeTooltip);
+            };
+            event.target?.addEventListener('mouseleave', removeTooltip);
+          },
+        }
+      );
       terminal.loadAddon(webLinksAddon);
 
       // Add search addon
