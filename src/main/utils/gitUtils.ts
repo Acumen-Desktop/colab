@@ -109,14 +109,17 @@ export const initGit = async (repoRoot: string) => {
 export const gitValidateUrl = async (gitUrl: string) => {
   try {
     // Use git ls-remote to check if the repository is reachable and clonable
-    const systemGit = simpleGit({
-      binary: 'git', // Use system git
+    const gitInstance = simpleGit({
+      binary: GIT_BINARY_PATH,
+      unsafe: {
+        allowUnsafeCustomBinary: true,
+      },
       maxConcurrentProcesses: 2,
       trimmed: false,
     });
-    
+
     // ls-remote will fail if the repo doesn't exist or isn't accessible
-    await systemGit.listRemote([gitUrl, 'HEAD']);
+    await gitInstance.listRemote([gitUrl, 'HEAD']);
     return { valid: true, error: null };
   } catch (error) {
     console.error('Git URL validation error:', error);
@@ -139,10 +142,13 @@ export const gitClone = async (repoPath: string, gitUrl: string, createMainBranc
         fs.mkdirSync(targetPath, { recursive: true });
       }
 
-      // Initialize git with main branch using system git
+      // Initialize git with main branch
       const repoGit = simpleGit({
         baseDir: targetPath,
-        binary: 'git',
+        binary: GIT_BINARY_PATH,
+        unsafe: {
+          allowUnsafeCustomBinary: true,
+        },
         maxConcurrentProcesses: 2,
         trimmed: false,
       });
@@ -160,14 +166,17 @@ export const gitClone = async (repoPath: string, gitUrl: string, createMainBranc
       return `Successfully cloned empty repository and initialized main branch at ${repoPath}`;
     } else {
       // Normal clone for repositories with existing branches
-      const systemGit = simpleGit({
+      const gitInstance = simpleGit({
         baseDir: parentDir,
-        binary: 'git', // Use system git instead of bundled git
+        binary: GIT_BINARY_PATH,
+        unsafe: {
+          allowUnsafeCustomBinary: true,
+        },
         maxConcurrentProcesses: 2,
         trimmed: false,
       });
 
-      await systemGit.clone(gitUrl, folderName);
+      await gitInstance.clone(gitUrl, folderName);
       return `Successfully cloned repository to ${repoPath}`;
     }
   } catch (error) {
@@ -265,12 +274,11 @@ export const gitAddRemote = async (repoRoot: string, remoteName: string, remoteU
 
 export const gitFetch = async (repoRoot: string, remote?: string, options: string[] = []) => {
   try {
-    // Use system git for remote operations to avoid missing remote-https helper
     const gitInstance = simpleGit({
       baseDir: repoRoot,
-      binary: 'git', // Use system git
-      unsafe: { 
-        allowUnsafeCustomBinary: false,
+      binary: GIT_BINARY_PATH,
+      unsafe: {
+        allowUnsafeCustomBinary: true,
         allowUnsafePack: true,
         allowUnsafeExtProtocol: true
       },
@@ -285,12 +293,11 @@ export const gitFetch = async (repoRoot: string, remote?: string, options: strin
 
 export const gitPull = async (repoRoot: string, remote?: string, branch?: string, options: string[] = []) => {
   try {
-    // Use system git for remote operations
     const gitInstance = simpleGit({
       baseDir: repoRoot,
-      binary: 'git', // Use system git
-      unsafe: { 
-        allowUnsafeCustomBinary: false,
+      binary: GIT_BINARY_PATH,
+      unsafe: {
+        allowUnsafeCustomBinary: true,
         allowUnsafePack: true,
         allowUnsafeExtProtocol: true
       },
@@ -305,12 +312,11 @@ export const gitPull = async (repoRoot: string, remote?: string, branch?: string
 
 export const gitPush = async (repoRoot: string, remote?: string, branch?: string, options: string[] = []) => {
   try {
-    // Use system git for remote operations
     const gitInstance = simpleGit({
       baseDir: repoRoot,
-      binary: 'git', // Use system git
-      unsafe: { 
-        allowUnsafeCustomBinary: false,
+      binary: GIT_BINARY_PATH,
+      unsafe: {
+        allowUnsafeCustomBinary: true,
         allowUnsafePack: true,
         allowUnsafeExtProtocol: true
       },
