@@ -48,7 +48,8 @@ export const BIOME_BINARY_PATH = join(COLAB_DEPS_PATH, "biome");
 export const LLAMA_CPP_BINARY_PATH = join(BUNDLED_BIN_PATH, "llama-cli");
 export const TSSERVER_PATH = join(COLAB_DEPS_PATH, "tsserver");
 // todo: switch to libgit2 and bundle it with co(lab)
-export const GIT_BINARY_PATH = join(BUNDLED_BIN_PATH, "vendor", "git");
+export const GIT_VENDOR_PATH = join(BUNDLED_BIN_PATH, "vendor");
+export const GIT_BINARY_PATH = join(GIT_VENDOR_PATH, "git");
 export const FD_BINARY_PATH = join(BUNDLED_BIN_PATH, "vendor", "fd");
 export const RG_BINARY_PATH = join(BUNDLED_BIN_PATH, "vendor", "rg");
 // installations paths

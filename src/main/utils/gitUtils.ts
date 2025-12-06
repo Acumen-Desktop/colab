@@ -1,15 +1,20 @@
 import simpleGit, { CheckRepoActions, type SimpleGit } from "simple-git";
-import { GIT_BINARY_PATH } from "../consts/paths";
+import { GIT_BINARY_PATH, GIT_VENDOR_PATH } from "../consts/paths";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+
+// Environment variables for vendored git - sets exec path so git can find helpers like git-remote-https
+const gitEnv = {
+  GIT_EXEC_PATH: GIT_VENDOR_PATH,
+};
 
 const git = (baseDir: string) => {
   return simpleGit({
     binary: GIT_BINARY_PATH,
     // note: unsafe allows us to use special characters in the file path
     // with this option enabled it will warn instead of throw https://github.com/steveukx/git-js/blob/859699d0cc1d0c9b94f53de9c61a060a2cecb656/simple-git/src/lib/plugins/custom-binary.plugin.ts#L25C18-L25C22
-    unsafe: { 
+    unsafe: {
       allowUnsafeCustomBinary: true,
       allowUnsafePack: true,
       allowUnsafeProtocolOverride: true
@@ -18,7 +23,7 @@ const git = (baseDir: string) => {
     maxConcurrentProcesses: 2, // Reduced to avoid overwhelming the system
     trimmed: false,
     config: ['core.quotepath=false'], // Disable path quoting that might cause issues
-  });
+  }).env(gitEnv);
 };
 
 export const gitShow = (repoRoot: string, options: string[]) => {
@@ -116,7 +121,7 @@ export const gitValidateUrl = async (gitUrl: string) => {
       },
       maxConcurrentProcesses: 2,
       trimmed: false,
-    });
+    }).env(gitEnv);
 
     // ls-remote will fail if the repo doesn't exist or isn't accessible
     await gitInstance.listRemote([gitUrl, 'HEAD']);
@@ -151,7 +156,7 @@ export const gitClone = async (repoPath: string, gitUrl: string, createMainBranc
         },
         maxConcurrentProcesses: 2,
         trimmed: false,
-      });
+      }).env(gitEnv);
 
       await repoGit.init(['--initial-branch=main']);
       await repoGit.addRemote('origin', gitUrl);
@@ -174,7 +179,7 @@ export const gitClone = async (repoPath: string, gitUrl: string, createMainBranc
         },
         maxConcurrentProcesses: 2,
         trimmed: false,
-      });
+      }).env(gitEnv);
 
       await gitInstance.clone(gitUrl, folderName);
       return `Successfully cloned repository to ${repoPath}`;
@@ -282,7 +287,7 @@ export const gitFetch = async (repoRoot: string, remote?: string, options: strin
         allowUnsafePack: true,
         allowUnsafeExtProtocol: true
       },
-    });
+    }).env(gitEnv);
     const result = await gitInstance.fetch(remote, undefined, options);
     return result;
   } catch (error) {
@@ -301,7 +306,7 @@ export const gitPull = async (repoRoot: string, remote?: string, branch?: string
         allowUnsafePack: true,
         allowUnsafeExtProtocol: true
       },
-    });
+    }).env(gitEnv);
     const result = await gitInstance.pull(remote, branch, options);
     return result;
   } catch (error) {
@@ -320,7 +325,7 @@ export const gitPush = async (repoRoot: string, remote?: string, branch?: string
         allowUnsafePack: true,
         allowUnsafeExtProtocol: true
       },
-    });
+    }).env(gitEnv);
     const result = await gitInstance.push(remote, branch, options);
     return result;
   } catch (error) {
