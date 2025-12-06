@@ -325,25 +325,11 @@ console.log('Preload script loaded for:', window.location.href);
   let loadTimeoutId: ReturnType<typeof setTimeout> | null = null;
   const LOAD_TIMEOUT_MS = 7000; // 7 seconds timeout
 
-  const startLoadTimeout = (url: string) => {
-    console.log("[WebSlate] Starting load timeout for:", url);
-    // Clear any existing timeout
-    if (loadTimeoutId) {
-      clearTimeout(loadTimeoutId);
-    }
+  const startLoadTimeout = (_url: string) => {
+    // Disabled: timeout-based error detection is unreliable
+    // TODO: Add proper error handling in Electrobun via did-fail-load events
     setIsLoading(true);
     setLoadError(null);
-
-    loadTimeoutId = setTimeout(() => {
-      // If still loading after timeout, show error
-      console.log("[WebSlate] Load timeout fired, isLoading:", isLoading());
-      if (isLoading()) {
-        setLoadError({
-          errorDescription: 'TIMEOUT',
-          validatedURL: url,
-        });
-      }
-    }, LOAD_TIMEOUT_MS);
   };
 
   const clearLoadTimeout = () => {
