@@ -336,6 +336,9 @@ export class ColabTerminal extends HTMLElement {
         },
         {
           hover: (event: MouseEvent, uri: string, range) => {
+            // Remove any existing tooltip first
+            document.querySelector('.colab-link-tooltip')?.remove();
+
             // Show tooltip explaining how to open the link
             const tooltip = document.createElement('div');
             tooltip.className = 'colab-link-tooltip';
@@ -356,13 +359,10 @@ export class ColabTerminal extends HTMLElement {
               word-break: break-all;
             `;
             document.body.appendChild(tooltip);
-
-            // Remove tooltip when mouse leaves
-            const removeTooltip = () => {
-              tooltip.remove();
-              event.target?.removeEventListener('mouseleave', removeTooltip);
-            };
-            event.target?.addEventListener('mouseleave', removeTooltip);
+          },
+          leave: () => {
+            // Remove tooltip when mouse leaves the link
+            document.querySelector('.colab-link-tooltip')?.remove();
           },
         }
       );
