@@ -10,6 +10,8 @@ export interface TerminalSession {
   ready: boolean;
   currentCwd?: string; // Track the current working directory
   inputBuffer: string; // Buffer for collecting input until Enter
+  stdoutReader?: ReadableStreamDefaultReader<Uint8Array>;
+  stderrReader?: ReadableStreamDefaultReader<Uint8Array>;
 }
 
 interface PtyMessage {
@@ -136,6 +138,10 @@ class TerminalManager {
     // Handle process exit
     proc.exited.then((exitCode) => {
       // console.log(`PTY process ${terminalId} exited with code ${exitCode}`);
+      const terminal = this.terminals.get(terminalId);
+      if (terminal) {
+        this.cleanupReaders(terminal);
+      }
       const handler = this.getMessageHandler(terminalId);
       handler?.({
         type: "terminalExit",
@@ -179,7 +185,14 @@ class TerminalManager {
     try {
       const stdoutReader = proc.stdout.getReader();
       const stderrReader = proc.stderr.getReader();
-      
+
+      // Store readers on terminal session for cleanup
+      const terminal = this.terminals.get(terminalId);
+      if (terminal) {
+        terminal.stdoutReader = stdoutReader;
+        terminal.stderrReader = stderrReader;
+      }
+
       // Read stdout (JSON messages from PTY binary)
       (async () => {
         try {
@@ -187,14 +200,14 @@ class TerminalManager {
           while (true) {
             const { done, value } = await stdoutReader.read();
             if (done) break;
-            
+
             const text = new TextDecoder().decode(value);
             buffer += text;
-            
+
             // Process complete JSON lines
             const lines = buffer.split('\n');
             buffer = lines.pop() || ''; // Keep incomplete line in buffer
-            
+
             for (const line of lines) {
               if (line.trim()) {
                 try {
@@ -207,7 +220,10 @@ class TerminalManager {
             }
           }
         } catch (error) {
-          console.error("Error reading PTY stdout:", error);
+          // Ignore errors when reader is cancelled during cleanup
+          if (!(error instanceof Error && error.name === 'AbortError')) {
+            console.error("Error reading PTY stdout:", error);
+          }
         }
       })();
 
@@ -217,17 +233,33 @@ class TerminalManager {
           while (true) {
             const { done, value } = await stderrReader.read();
             if (done) break;
-            
+
             const text = new TextDecoder().decode(value);
             console.error(`PTY ${terminalId} stderr:`, text);
           }
         } catch (error) {
-          console.error("Error reading PTY stderr:", error);
+          // Ignore errors when reader is cancelled during cleanup
+          if (!(error instanceof Error && error.name === 'AbortError')) {
+            console.error("Error reading PTY stderr:", error);
+          }
         }
       })();
-      
+
     } catch (error) {
       console.error("Error setting up PTY output readers:", error);
+    }
+  }
+
+  private cleanupReaders(terminal: TerminalSession) {
+    try {
+      terminal.stdoutReader?.cancel();
+    } catch (e) {
+      // Already closed or cancelled
+    }
+    try {
+      terminal.stderrReader?.cancel();
+    } catch (e) {
+      // Already closed or cancelled
     }
   }
 
@@ -388,6 +420,9 @@ class TerminalManager {
     }
 
     try {
+      // Cancel stream readers first to stop the read loops
+      this.cleanupReaders(terminal);
+
       // Send shutdown message to PTY binary
       this.sendPtyMessage(terminalId, {
         type: 'shutdown'
@@ -422,11 +457,14 @@ class TerminalManager {
   cleanup() {
     for (const terminal of this.terminals.values()) {
       try {
+        // Cancel stream readers first to stop the read loops
+        this.cleanupReaders(terminal);
+
         // Send shutdown message to each PTY
         this.sendPtyMessage(terminal.id, {
           type: 'shutdown'
         });
-        
+
         // Kill the process after a short delay
         setTimeout(() => {
           try {
