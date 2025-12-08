@@ -358,6 +358,35 @@ export type WorkspaceRPC = {
           error: string | null;
         };
       };
+      getGitConfig: {
+        params: void;
+        response: {
+          name: string;
+          email: string;
+          hasKeychainHelper: boolean;
+        };
+      };
+      setGitConfig: {
+        params: {
+          name: string;
+          email: string;
+        };
+        response: void;
+      };
+      checkGitHubCredentials: {
+        params: void;
+        response: {
+          hasCredentials: boolean;
+          username?: string;
+        };
+      };
+      storeGitHubCredentials: {
+        params: {
+          username: string;
+          token: string;
+        };
+        response: void;
+      };
       syncWorkspace: {
         params: {
           workspace: WorkspaceType;

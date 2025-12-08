@@ -127,6 +127,10 @@ import {
   gitCreateBranch,
   gitDeleteBranch,
   gitTrackRemoteBranch,
+  getGitConfig,
+  setGitConfig,
+  checkGitHubCredentials,
+  storeGitHubCredentials,
 } from "./utils/gitUtils";
 import { terminalManager } from "./utils/terminalManager";
 // import { terminalManagerPty as terminalManager } from "./utils/terminalManagerPty";
@@ -1220,6 +1224,18 @@ const createWindow = (workspaceId: string, window?: WindowConfigType, offset?: {
         },
         gitValidateUrl: ({ gitUrl }) => {
           return gitValidateUrl(gitUrl);
+        },
+        getGitConfig: () => {
+          return getGitConfig();
+        },
+        setGitConfig: ({ name, email }) => {
+          return setGitConfig(name, email);
+        },
+        checkGitHubCredentials: () => {
+          return checkGitHubCredentials();
+        },
+        storeGitHubCredentials: ({ username, token }) => {
+          return storeGitHubCredentials(username, token);
         },
         gitCreateBranch: ({ repoRoot, branchName, options }) => {
           return gitCreateBranch(repoRoot, branchName, options);

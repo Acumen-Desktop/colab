@@ -407,6 +407,108 @@ export const gitBranch = async (repoRoot: string, options: string[] = []) => {
   }
 };
 
+// Get global git configuration (user.name, user.email)
+export const getGitConfig = async (): Promise<{ name: string; email: string; hasKeychainHelper: boolean }> => {
+  try {
+    const gitInstance = simpleGit({
+      binary: GIT_BINARY_PATH,
+      unsafe: {
+        allowUnsafeCustomBinary: true,
+        allowUnsafePack: true,
+        allowUnsafeProtocolOverride: true,
+      },
+      maxConcurrentProcesses: 2,
+      trimmed: false,
+    }).env(gitEnv);
+
+    let name = '';
+    let email = '';
+
+    try {
+      name = (await gitInstance.raw(['config', '--global', 'user.name'])).trim();
+    } catch (e) {
+      // Not configured
+    }
+
+    try {
+      email = (await gitInstance.raw(['config', '--global', 'user.email'])).trim();
+    } catch (e) {
+      // Not configured
+    }
+
+    return { name, email, hasKeychainHelper: hasOsxKeychainHelper };
+  } catch (error) {
+    console.error('Error getting git config:', error);
+    return { name: '', email: '', hasKeychainHelper: hasOsxKeychainHelper };
+  }
+};
+
+// Set global git configuration
+export const setGitConfig = async (name: string, email: string): Promise<void> => {
+  try {
+    const gitInstance = simpleGit({
+      binary: GIT_BINARY_PATH,
+      unsafe: {
+        allowUnsafeCustomBinary: true,
+        allowUnsafePack: true,
+        allowUnsafeProtocolOverride: true,
+      },
+      maxConcurrentProcesses: 2,
+      trimmed: false,
+    }).env(gitEnv);
+
+    if (name) {
+      await gitInstance.raw(['config', '--global', 'user.name', name]);
+    }
+    if (email) {
+      await gitInstance.raw(['config', '--global', 'user.email', email]);
+    }
+  } catch (error) {
+    console.error('Error setting git config:', error);
+    throw error;
+  }
+};
+
+// Check if GitHub credentials are stored in the macOS Keychain
+export const checkGitHubCredentials = async (): Promise<{ hasCredentials: boolean; username?: string }> => {
+  if (!hasOsxKeychainHelper) {
+    return { hasCredentials: false };
+  }
+
+  try {
+    // Use security command to check for github.com credentials in keychain
+    const { execSync } = await import('child_process');
+    const result = execSync('security find-internet-password -s github.com 2>/dev/null', { encoding: 'utf-8' });
+
+    // Parse the account name from the output
+    const acctMatch = result.match(/"acct"<blob>="([^"]+)"/);
+    const username = acctMatch ? acctMatch[1] : undefined;
+
+    return { hasCredentials: true, username };
+  } catch (error) {
+    // No credentials found or error accessing keychain
+    return { hasCredentials: false };
+  }
+};
+
+// Store GitHub credentials in the macOS Keychain using git credential helper
+export const storeGitHubCredentials = async (username: string, token: string): Promise<void> => {
+  if (!hasOsxKeychainHelper) {
+    throw new Error('macOS Keychain credential helper not available');
+  }
+
+  try {
+    const { execSync } = await import('child_process');
+
+    // Use git credential to store the credentials
+    const input = `protocol=https\nhost=github.com\nusername=${username}\npassword=${token}\n`;
+    execSync(`echo "${input}" | ${OSXKEYCHAIN_HELPER} store`, { encoding: 'utf-8' });
+  } catch (error) {
+    console.error('Error storing GitHub credentials:', error);
+    throw error;
+  }
+};
+
 export const gitCheckoutBranch = async (repoRoot: string, branch: string, options: string[] = []) => {
   try {
     await git(repoRoot).checkout(branch, options);
