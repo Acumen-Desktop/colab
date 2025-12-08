@@ -509,6 +509,24 @@ export const storeGitHubCredentials = async (username: string, token: string): P
   }
 };
 
+// Remove GitHub credentials from the macOS Keychain
+export const removeGitHubCredentials = async (): Promise<void> => {
+  if (!hasOsxKeychainHelper) {
+    throw new Error('macOS Keychain credential helper not available');
+  }
+
+  try {
+    const { execSync } = await import('child_process');
+
+    // Use git credential helper to erase credentials
+    const input = `protocol=https\nhost=github.com\n`;
+    execSync(`echo "${input}" | ${OSXKEYCHAIN_HELPER} erase`, { encoding: 'utf-8' });
+  } catch (error) {
+    console.error('Error removing GitHub credentials:', error);
+    throw error;
+  }
+};
+
 export const gitCheckoutBranch = async (repoRoot: string, branch: string, options: string[] = []) => {
   try {
     await git(repoRoot).checkout(branch, options);

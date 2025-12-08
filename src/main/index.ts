@@ -131,6 +131,7 @@ import {
   setGitConfig,
   checkGitHubCredentials,
   storeGitHubCredentials,
+  removeGitHubCredentials,
 } from "./utils/gitUtils";
 import { terminalManager } from "./utils/terminalManager";
 // import { terminalManagerPty as terminalManager } from "./utils/terminalManagerPty";
@@ -1236,6 +1237,9 @@ const createWindow = (workspaceId: string, window?: WindowConfigType, offset?: {
         },
         storeGitHubCredentials: ({ username, token }) => {
           return storeGitHubCredentials(username, token);
+        },
+        removeGitHubCredentials: () => {
+          return removeGitHubCredentials();
         },
         gitCreateBranch: ({ repoRoot, branchName, options }) => {
           return gitCreateBranch(repoRoot, branchName, options);

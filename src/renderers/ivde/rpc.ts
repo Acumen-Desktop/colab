@@ -387,6 +387,10 @@ export type WorkspaceRPC = {
         };
         response: void;
       };
+      removeGitHubCredentials: {
+        params: void;
+        response: void;
+      };
       syncWorkspace: {
         params: {
           workspace: WorkspaceType;

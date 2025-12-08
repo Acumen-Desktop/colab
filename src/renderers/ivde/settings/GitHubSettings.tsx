@@ -477,6 +477,31 @@ export const GitHubSettings = (): JSXElement => {
               </div>
             </SettingsPaneField>
 
+            <Show when={hasKeychainHelper() && keychainCredentials().hasCredentials}>
+              <SettingsPaneField label="">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await electrobun.rpc?.request.removeGitHubCredentials();
+                      setKeychainCredentials({ hasCredentials: false });
+                      setCredentialStatus("Credentials removed from Keychain");
+                      setTimeout(() => setCredentialStatus(""), 2000);
+                    } catch (error) {
+                      console.error("Error removing credentials:", error);
+                      setCredentialStatus("Failed to remove credentials");
+                    }
+                  }}
+                  style="background: #ff6b6b; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 12px; width: 100%;"
+                >
+                  Remove Credentials
+                </button>
+                <div style="font-size: 11px; color: #999; margin-top: 8px;">
+                  Remove stored credentials to enter new ones or switch accounts.
+                </div>
+              </SettingsPaneField>
+            </Show>
+
             <Show when={hasKeychainHelper() && !keychainCredentials().hasCredentials}>
               <Show
                 when={isStoringCredentials()}
