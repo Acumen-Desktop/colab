@@ -143,7 +143,8 @@ export const getProjectForNodePath = (
   nodePath: string,
   _state: AppState = state
 ) => {
-  const project = Object.values(_state.projects).find((project) => {
+  // Find all projects that contain this path
+  const matchingProjects = Object.values(_state.projects).filter((project) => {
     // Skip projects with empty or invalid paths
     if (!project.path) {
       return false;
@@ -151,7 +152,15 @@ export const getProjectForNodePath = (
     return nodePath.startsWith(project.path);
   });
 
-  return project;
+  if (matchingProjects.length === 0) {
+    return undefined;
+  }
+
+  // Return the most specific (deepest nested) project
+  // This ensures files in nested projects are associated with the child project, not the parent
+  return matchingProjects.reduce((deepest, current) => {
+    return current.path.length > deepest.path.length ? current : deepest;
+  });
 };
 
 export const getFileTreesChildPathToNode = (nodePath: string): string[] => {
