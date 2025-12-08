@@ -66,9 +66,11 @@ export const writeSlateConfigFile = (
   absoluteFolderPath: string,
   slate: SlateType
 ) => {
-  if (slate.type === "project" || slate.type === "web" || slate.type === "agent") {
+  // Projects are stored in GoldfishDB, not .colab.json
+  // Only write .colab.json for web and agent slates
+  if (slate.type === "web" || slate.type === "agent") {
     const configPath = join(absoluteFolderPath, ".colab.json");
-    
+
     let contents;
     if (slate.type === "agent") {
       contents = JSON.stringify({
@@ -79,7 +81,7 @@ export const writeSlateConfigFile = (
         config: slate.config || {},
       });
     } else {
-      // web and project types
+      // web type
       contents = JSON.stringify({
         v: 1,
         name: slate.name || "",
@@ -310,9 +312,16 @@ export const getSlateForNode = (
       const cachedConfig = state.slateCache[absoluteColabConfigPath];
 
       if (cachedConfig) {
+        // Skip project slates from .colab.json - projects are now stored in GoldfishDB
+        // and detected via isProjectRoot()
+        if (cachedConfig.type === "project") {
+          return undefined;
+        }
         return cachedConfig;
       }
 
+      // Note: readSlateConfigFile is async, so we can't filter here.
+      // Project slates will be filtered when they're read from cache next time.
       return readSlateConfigFile(absoluteColabConfigPath);
     }
 

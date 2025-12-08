@@ -116,14 +116,14 @@ function _format(sep, pathObject) {
 export function resolve() {
   var resolvedPath = "";
   var resolvedAbsolute = false;
-  var cwd;
 
   for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
     var path;
     if (i >= 0) path = arguments[i];
     else {
-      if (cwd === undefined) cwd = process.cwd();
-      path = cwd;
+      // In browser environment, we don't have process.cwd()
+      // Since we're always dealing with absolute paths in Colab, use "/" as fallback
+      path = "/";
     }
 
     assertPath(path);

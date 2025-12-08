@@ -2429,6 +2429,14 @@ const NodeSettings = () => {
 			initializeNewNodeType(nodeType);
 		}
 
+		// For existing project roots (no slate), populate project name from DB
+		if (_previewNode.type === "dir" && projectNameRef) {
+			const project = getProjectByRootPath(_previewNode.path);
+			if (project) {
+				projectNameRef.value = project.name;
+			}
+		}
+
 		if (
 			_previewNode.type !== "dir" ||
 			!("slate" in _previewNode) ||
@@ -2454,7 +2462,8 @@ const NodeSettings = () => {
 			setBrowserProfileNameInputValue(browserProfileNameRef.value || "");
 		}
 
-		if (projectNameRef && "name" in previewSlate) {
+		// For new projects being added with a slate, use the slate name
+		if (projectNameRef && "name" in previewSlate && previewSlate.type === "project") {
 			projectNameRef.value = previewSlate.name;
 		}
 
@@ -2514,9 +2523,10 @@ const NodeSettings = () => {
 			throw new Error("previewNode is null");
 		}
 
-		if (getSlateForNode(_previewNode)?.type === "project") {
+		if (isProjectNode()) {
 			const nodePath = node()?.path;
 			const previewNodePath = _previewNode?.path;
+			// When editing an existing project, it's not a conflict with itself
 			if (
 				state.settingsPane.type === "edit-node" &&
 				nodePath === previewNodePath
@@ -2524,23 +2534,15 @@ const NodeSettings = () => {
 				return false;
 			}
 
-			// make sure the new project name doesn't conflict with an existing project
+			// Only check for exact duplicate projects (same path)
+			// Nested projects are allowed
 			const newPath = _previewNode.path;
 
-			const existingProjectAncestorOrDescendant = Object.keys(
-				state.projects,
-			).find((projectId) => {
-				const project = state.projects[projectId];
+			const existingDuplicateProject = Object.values(state.projects).find(
+				(project) => project.path && newPath === project.path
+			);
 
-				return (
-					isDescendantPath(newPath, project.path) ||
-					isDescendantPath(project.path, newPath) ||
-					// duplicate project
-					newPath === project.path
-				);
-			});
-
-			if (existingProjectAncestorOrDescendant) {
+			if (existingDuplicateProject) {
 				return true;
 			}
 		}
@@ -2628,18 +2630,21 @@ const NodeSettings = () => {
 				}
 			}
 
-			if (_previewNode.type === "dir" && slateType) {
+			// Write .colab.json for directory slates (web, agent, etc.) but NOT for projects
+			// Projects are stored in GoldfishDB and detected via isProjectRoot()
+			if (_previewNode.type === "dir" && slateType && slateType !== "project") {
 				writeSlateConfigFile(_previewNode.path, getSlateForNode(_previewNode));
 			}
 
-			if (getSlateForNode(_previewNode)?.type === "project") {
-				const projectName = getSlateForNode(_previewNode)?.name;
+			if (isProjectNode()) {
 				const absolutePath = _previewNode.path;
 
 				if (settingsType === "edit-node") {
-					const project = getProjectForNode(_node);
+					// For existing projects, get the project by its root path and use the input value
+					const project = getProjectByRootPath(_node.path);
 					if (project) {
-						// editing
+						// Get project name from the input field (which may have been edited)
+						const projectName = projectNameRef?.value || project.name;
 						electrobun.rpc?.send.editProject({
 							projectId: project.id,
 							projectName,
@@ -2647,6 +2652,8 @@ const NodeSettings = () => {
 						});
 					}
 				} else {
+					// For new projects, get name from the preview node's slate
+					const projectName = getSlateForNode(_previewNode)?.name;
 					electrobun.rpc?.request.addProject({
 						projectName,
 						path: absolutePath,
@@ -3475,7 +3482,7 @@ const NodeSettings = () => {
 											<Switch>
 												<Match when={isProjectConflict()}>
 													<div style="color: #dd4444; font-size: 12px; margin-top: 4px;">
-														Cannot add duplicate or nested projects
+														This folder is already added as a project
 													</div>
 												</Match>
 												<Match
