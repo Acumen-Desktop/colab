@@ -500,9 +500,14 @@ export const storeGitHubCredentials = async (username: string, token: string): P
   try {
     const { execSync } = await import('child_process');
 
-    // Use git credential to store the credentials
-    const input = `protocol=https\nhost=github.com\nusername=${username}\npassword=${token}\n`;
-    execSync(`echo "${input}" | ${OSXKEYCHAIN_HELPER} store`, { encoding: 'utf-8' });
+    // Use printf to properly handle newlines (echo -e not available on all systems)
+    // Format required by git-credential: key=value pairs separated by newlines, ending with empty line
+    const input = `protocol=https
+host=github.com
+username=${username}
+password=${token}
+`;
+    execSync(`printf '%s' "${input}" | ${OSXKEYCHAIN_HELPER} store`, { encoding: 'utf-8' });
   } catch (error) {
     console.error('Error storing GitHub credentials:', error);
     throw error;
