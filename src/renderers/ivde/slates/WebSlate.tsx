@@ -600,20 +600,14 @@ console.log('Preload script loaded for:', window.location.href);
 
       // Check if this path is inside an existing project
       const existingProject = getProjectForNodePath(selectedPath);
-      console.log("[SaveBrowserProfile] selectedPath:", selectedPath);
-      console.log("[SaveBrowserProfile] existingProject:", existingProject);
-      console.log("[SaveBrowserProfile] existingProject path:", existingProject?.path);
-      console.log("[SaveBrowserProfile] all projects:", Object.values(state.projects).map(p => p.path));
 
       if (!existingProject) {
         // Add the selected folder as a new project
         const projectName = selectedPath.split("/").pop() || "Browser Profiles";
-        console.log("[SaveBrowserProfile] Adding new project:", projectName, "at path:", selectedPath);
-        const addResult = await electrobun.rpc?.request.addProject({
+        await electrobun.rpc?.request.addProject({
           projectName,
           path: selectedPath,
         });
-        console.log("[SaveBrowserProfile] addProject result:", addResult);
 
         // Wait a bit for the project to be created and file watcher to pick it up
         await new Promise(resolve => setTimeout(resolve, 500));

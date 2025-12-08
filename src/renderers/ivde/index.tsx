@@ -23,6 +23,8 @@ import {
 	getProjectForNode,
 	getSlateForNode,
 	isDescendantPath,
+	isProjectRoot,
+	getProjectByRootPath,
 	writeSlateConfigFile,
 	findPluginSlateForFile,
 	loadPluginSlates,
@@ -2502,7 +2504,7 @@ const NodeSettings = () => {
 	});
 
 	const isOkToChooseExisitingPath = () =>
-		getSlateForNode(previewNode())?.type === "project" &&
+		isProjectNode() &&
 		state.settingsPane.type === "add-node";
 
 	const isProjectConflict = () => {
@@ -3184,12 +3186,16 @@ const NodeSettings = () => {
 	const isProjectNode = () => {
 		const settingsPaneData = state.settingsPane.data;
 		if ("previewNode" in settingsPaneData) {
-			return getSlateForNode(settingsPaneData.previewNode)?.type === "project";
+			// Check if this is a project root either by slate type (for new projects being added)
+			// or by checking if the node's path matches a project path (for existing projects)
+			const slateType = getSlateForNode(settingsPaneData.previewNode)?.type;
+			if (slateType === "project") return true;
+			return isProjectRoot(settingsPaneData.previewNode);
 		}
 	};
 
 	const settingsTitle = () => {
-		if (getSlateForNode(previewNode())?.type === "project") {
+		if (isProjectNode()) {
 			return isEditingNode() ? "Edit Project" : "Add Project";
 		}
 		return isEditingNode() ? "Edit Node" : "Add Node";
@@ -3233,17 +3239,14 @@ const NodeSettings = () => {
 				setState("settingsPane", { type: "", data: {} });
 			}
 
-			// Check if this specific node is a project root (has project slate)
-			const slate = getSlateForNode(_node);
+			// Check if this specific node is a project root
+			const projectForRoot = getProjectByRootPath(_node.path);
 
-			if (slate?.type === "project") {
+			if (projectForRoot) {
 				// For project root nodes, use the project-specific deletion
-				const project = getProjectForNode(_node);
-				if (project) {
-					electrobun.rpc?.send.fullyDeleteProjectFromDiskAndColab({
-						projectId: project.id,
-					});
-				}
+				electrobun.rpc?.send.fullyDeleteProjectFromDiskAndColab({
+					projectId: projectForRoot.id,
+				});
 			} else {
 				// For regular nodes or nested nodes within projects, use node deletion
 				electrobun.rpc?.send.fullyDeleteNodeFromDisk({
@@ -3256,7 +3259,9 @@ const NodeSettings = () => {
 	const onClickRemoveProjectFromColabOnly = () => {
 		const _node = node();
 		if (_node) {
-			const project = getProjectForNode(_node);
+			// Use getProjectByRootPath to find the project whose root IS this node
+			// (not just a project that contains this node)
+			const project = getProjectByRootPath(_node.path);
 			if (project) {
 				electrobun.rpc?.send.removeProjectFromColabOnly({
 					projectId: project.id,
@@ -3335,7 +3340,7 @@ const NodeSettings = () => {
 	const [folderInputLabel, setFolderInputLabel] = createSignal("");
 
 	createEffect(async () => {
-		if (getSlateForNode(previewNode())?.type === "project") {
+		if (isProjectNode()) {
 			const _projectPath = previewNode()?.path;
 			if (!_projectPath) {
 				return;
@@ -3424,7 +3429,7 @@ const NodeSettings = () => {
 										<Show
 											when={
 												state.settingsPane.type === "add-node" &&
-												getSlateForNode(previewNode())?.type === "project"
+												isProjectNode()
 											}
 										>
 											<SettingsPaneField label="Select or Create a project folder">
@@ -3513,7 +3518,7 @@ const NodeSettings = () => {
 									</SettingsPaneFormSection>
 
 									<Show
-										when={getSlateForNode(previewNode())?.type === "project"}
+										when={isProjectNode()}
 									>
 										<SettingsPaneFormSection label={"Project Settings"}>
 											<SettingsPaneField label="Project Name">

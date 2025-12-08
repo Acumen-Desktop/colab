@@ -114,6 +114,29 @@ export const getProjectForNode = (
   return getProjectForNodePath(node.path, _state);
 };
 
+// Check if a node is the root of a project (its path exactly matches a project path)
+export const isProjectRoot = (
+  node: PreviewFileTreeType | CachedFileType | null | undefined,
+  _state: AppState = state
+) => {
+  if (!node) {
+    return false;
+  }
+  return Object.values(_state.projects).some(
+    (project) => project.path && project.path === node.path
+  );
+};
+
+// Get the project that has this node as its root (exact match, not descendant)
+export const getProjectByRootPath = (
+  nodePath: string,
+  _state: AppState = state
+) => {
+  return Object.values(_state.projects).find(
+    (project) => project.path && project.path === nodePath
+  );
+};
+
 export const getProjectForNodePath = (
   nodePath: string,
   _state: AppState = state

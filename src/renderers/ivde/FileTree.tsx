@@ -1,4 +1,4 @@
-import { getProjectForNode, getSlateForNode, isDescendantPath } from "./files";
+import { getProjectForNode, getSlateForNode, isDescendantPath, isProjectRoot, getProjectByRootPath } from "./files";
 
 import {
   type Accessor,
@@ -1325,20 +1325,26 @@ const NodeName = ({
         console.warn('Failed to fetch plugin context menu items:', err);
       }
 
+      // Check if this node is a project root (its path exactly matches a project's path)
+      const nodeIsProjectRoot = isProjectRoot(_nodeToRender);
+      const projectForRoot = nodeIsProjectRoot && _nodeToRender?.path
+        ? getProjectByRootPath(_nodeToRender.path)
+        : null;
+
       menuItems.push(
           {
             label: "Remove Project from Colab",
-            hidden: readonly || getSlateForNode(_nodeToRender)?.type !== "project",
+            hidden: readonly || !nodeIsProjectRoot,
             ...createContextMenuAction("remove_project_from_colab", {
-              projectId: getProjectForNode(_nodeToRender)?.id,
+              projectId: projectForRoot?.id,
             }),
           },
           {
             label: "Delete Node from Disk",
-            hidden: readonly || getSlateForNode(_nodeToRender)?.type === "project",
+            hidden: readonly || nodeIsProjectRoot,
             ...createContextMenuAction("fully_delete_node_from_disk", {
               nodePath: _nodeToRender?.path,
-              projectId: getSlateForNode(_nodeToRender)?.type === "project" ? getProjectForNode(_nodeToRender)?.id : undefined,
+              projectId: nodeIsProjectRoot ? projectForRoot?.id : undefined,
             }),
           },
         );
