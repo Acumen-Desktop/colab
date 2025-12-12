@@ -98,6 +98,7 @@ import { getNode } from "./FileWatcher";
 import { BlackboardAnimation } from "./components/BlackboardAnimation";
 import { GitHubRepoSelector } from "./components/GitHubRepoSelector";
 import { StatusBar } from "./components/StatusBar";
+import { Dialog } from "./components/Dialog";
 import { TopBar } from "./components/TopBar";
 import { type GitHubRepository, githubService } from "./services/githubService";
 import { ColabCloudSettings } from "./settings/ColabCloudSettings";
@@ -159,6 +160,14 @@ window.open = (url, target) => {
 	return null;
 };
 
+// Close window confirmation dialog state
+const [closeWindowDialogOpen, setCloseWindowDialogOpen] = createSignal(false);
+
+const confirmCloseWindow = () => {
+	setCloseWindowDialogOpen(false);
+	electrobun.rpc?.send.closeWindow();
+};
+
 document.addEventListener(
 	"keydown",
 	(e) => {
@@ -211,7 +220,15 @@ document.addEventListener(
 				focusNewTab: true,
 			});
 		} else if (e.key === "w" && e.metaKey === true && e.shiftKey === true) {
-			electrobun.rpc?.send.closeWindow();
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			const win = getWindow();
+			const tabCount = Object.keys(win?.tabs || {}).length;
+			if (tabCount > 0) {
+				setCloseWindowDialogOpen(true);
+			} else {
+				electrobun.rpc?.send.closeWindow();
+			}
 		} else if (e.key === "w" && e.metaKey === true) {
 			e.preventDefault();
 			e.stopImmediatePropagation();
@@ -888,6 +905,17 @@ const App = () => {
 				</div>
 			</div>
 			<StatusBar />
+			{/* Close Window Confirmation Dialog */}
+			<Dialog
+				isOpen={closeWindowDialogOpen}
+				title="Close Window?"
+				message={`You have ${Object.keys(getWindow()?.tabs || {}).length} open tab(s). Are you sure you want to close this window?`}
+				onConfirm={confirmCloseWindow}
+				onCancel={() => setCloseWindowDialogOpen(false)}
+				confirmText="Close Window"
+				cancelText="Cancel"
+				type="danger"
+			/>
 		</div>
 	);
 };

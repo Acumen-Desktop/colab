@@ -68,6 +68,19 @@ const colabPreloadScript = `
     if (e.key === 'w' && e.metaKey) {
       shouldForward = true;
     }
+    // Escape/Enter - for dialogs (but don't prevent default so they still work in websites)
+    if (e.key === 'Escape' || e.key === 'Enter') {
+      if (typeof window.__electrobunSendToHost === 'function') {
+        window.__electrobunSendToHost({
+          type: 'colab:keydown',
+          key: e.key,
+          ctrlKey: e.ctrlKey,
+          shiftKey: e.shiftKey,
+          altKey: e.altKey,
+          metaKey: e.metaKey
+        });
+      }
+    }
 
     if (shouldForward) {
       e.preventDefault();
