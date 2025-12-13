@@ -237,4 +237,5 @@ jobs:
       - name: Publish to npm
         run: |
           cd test-plugin
+          npm install
           npm publish --provenance --access public
