@@ -1,5 +1,15 @@
 name: Build and Release
 
+# CACHE WARMING NOTE:
+# GitHub caches are scoped by branch/ref. Tags cannot share caches with each other.
+# Caches from 'main' branch ARE accessible to all tags.
+#
+# If you update versions.env (zig/llama.cpp versions), you must warm the cache:
+#   1. Push the change to main, OR
+#   2. Manually run this workflow from main: Actions → Build and Release → Run workflow → main
+#
+# Otherwise the first tag build after a version change will have a cache miss (~10 min rebuild).
+
 on:
   push:
     tags:
