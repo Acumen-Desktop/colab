@@ -204,7 +204,7 @@ jobs:
   #         security delete-keychain build.keychain || true
 
   publish-demo-plugin:
-    needs: build
+    # needs: build
     runs-on: ubuntu-latest
     # Only publish for stable releases (not canary)
     if: ${{ contains(github.ref, '-canary') }}
