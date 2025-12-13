@@ -219,11 +219,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
 
-      - name: Configure npm for Trusted Publishing
+      - name: Update npm for Trusted Publishing
+        run: npm install -g npm@latest
+
+      - name: Debug npm config
         run: |
-          npm config set registry https://registry.npmjs.org/
+          echo "npm version: $(npm --version)"
+          echo "Node version: $(node --version)"
 
       - name: Extract version from tag
         id: version
