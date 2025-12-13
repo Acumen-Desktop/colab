@@ -12,7 +12,7 @@ jobs:
   #   runs-on: macos-15  # GitHub-hosted Apple Silicon runner
   #   outputs:
   #     cache-hit: ${{ steps.cache-check.outputs.cache-hit }}
-    
+
   #   steps:
   #     - name: Checkout code
   #       uses: actions/checkout@v4
@@ -55,7 +55,7 @@ jobs:
   # build:
   #   needs: build-deps
   #   runs-on: macos-15  # GitHub-hosted Apple Silicon runner
-    
+
   #   steps:
   #     - name: Checkout code
   #       uses: actions/checkout@v4
@@ -104,14 +104,14 @@ jobs:
   #         else
   #           echo "✅ Zig found at vendors/zig/zig"
   #         fi
-          
+
   #         if [ ! -f "llama-cli/deps/llama.cpp/include/llama.h" ]; then
   #           echo "❌ llama.h not found, running setup"
   #           bun setup
   #         else
   #           echo "✅ llama.h found"
   #         fi
-          
+
 
   #     - name: Install Apple Certificate
   #       env:
@@ -120,27 +120,27 @@ jobs:
   #       run: |
   #         # Clean up any existing keychain from previous builds
   #         security delete-keychain build.keychain || true
-          
+
   #         # Create temporary keychain
   #         echo $MACOS_CERTIFICATE | base64 --decode > certificate.p12
   #         security create-keychain -p actions build.keychain
-          
+
   #         # Add to search list so codesign can find it
   #         security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed s/\"//g)
   #         security default-keychain -s build.keychain
   #         security unlock-keychain -p actions build.keychain
-          
+
   #         # Import certificate with proper access
   #         security import certificate.p12 -k build.keychain -P $MACOS_CERTIFICATE_PWD -T /usr/bin/codesign -T /usr/bin/productbuild
   #         security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
-          
+
   #         # Keep keychain unlocked for the entire session
   #         security set-keychain-settings -lut 21600 build.keychain
-          
+
   #         # Verify certificate is accessible
   #         echo "Available signing identities:"
   #         security find-identity -v -p codesigning build.keychain
-          
+
   #         rm certificate.p12
 
   #     - name: Determine build type
@@ -158,11 +158,11 @@ jobs:
   #       run: |
   #         # Mask sensitive values in logs
   #         echo "::add-mask::$ELECTROBUN_DEVELOPER_ID"
-  #         echo "::add-mask::$ELECTROBUN_APPLEID" 
+  #         echo "::add-mask::$ELECTROBUN_APPLEID"
   #         echo "::add-mask::$ELECTROBUN_APPLEIDPASS"
   #         echo "::add-mask::$ELECTROBUN_TEAMID"
   #         echo "::add-mask::$MIXPANEL_TOKEN"
-          
+
   #         # Run the build
   #         bun build:${{ steps.build_type.outputs.BUILD_ENV }}
   #       env:
@@ -172,7 +172,7 @@ jobs:
   #         ELECTROBUN_APPLEIDPASS: ${{ secrets.ELECTROBUN_APPLEIDPASS || '' }}
   #         ELECTROBUN_TEAMID: ${{ secrets.ELECTROBUN_TEAMID || '' }}
   #         # Analytics
-  #         MIXPANEL_TOKEN: ${{ secrets.MIXPANEL_TOKEN || '' }}          
+  #         MIXPANEL_TOKEN: ${{ secrets.MIXPANEL_TOKEN || '' }}
 
   #     - name: Prepare artifacts for upload
   #       id: prepare_artifacts
@@ -184,7 +184,7 @@ jobs:
   #           exit 1
   #         fi
   #         echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_OUTPUT
-          
+
   #         # List artifacts for debugging
   #         ls -la "$ARTIFACTS_DIR"
 
@@ -207,7 +207,7 @@ jobs:
     # needs: build
     runs-on: ubuntu-latest
     # Only publish for stable releases (not canary)
-    if: ${{ contains(github.ref, '-canary') }}
+    if: ${{ !contains(github.ref, '-canary') }}
     permissions:
       contents: read
       id-token: write  # Required for npm Trusted Publishing (OIDC)
@@ -219,16 +219,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '23'
           registry-url: 'https://registry.npmjs.org'
-
-      - name: Update npm for Trusted Publishing
-        run: npm install -g npm@latest
-
-      - name: Debug npm config
-        run: |
-          echo "npm version: $(npm --version)"
-          echo "Node version: $(node --version)"
 
       - name: Extract version from tag
         id: version
