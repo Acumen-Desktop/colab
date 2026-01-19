@@ -24,6 +24,7 @@ export default {
             "codesign": true,
             "notarize": true,
             "bundleCEF": true,
+            "defaultRenderer": "cef",
             "entitlements": {
 
             }

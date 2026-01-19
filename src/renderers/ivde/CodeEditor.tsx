@@ -13,10 +13,10 @@ import {
 } from "./store";
 
 // import "monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution";
-import "monaco-editor/esm/vs/language/typescript/monaco.contribution";
-import "monaco-editor/esm/vs/language/css/monaco.contribution";
-import "monaco-editor/esm/vs/language/html/monaco.contribution";
-import "monaco-editor/esm/vs/language/json/monaco.contribution";
+import "monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
+import "monaco-editor/esm/vs/language/css/monaco.contribution.js";
+import "monaco-editor/esm/vs/language/html/monaco.contribution.js";
+import "monaco-editor/esm/vs/language/json/monaco.contribution.js";
 // note: there is no markdown worker, just use plaintext
 
 import "monaco-editor/min/vs/editor/editor.main.css";
