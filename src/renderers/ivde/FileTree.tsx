@@ -190,44 +190,44 @@ const CategoryRow = ({ label, showAddButton = false }: { label: string; showAddB
           onMouseEnter={() => setIsAddButtonHovered(true)}
           onMouseLeave={() => setIsAddButtonHovered(false)}
           onClick={() => {
-          electrobun.rpc?.request
-            .newPreviewNode({ candidateName: "new-project" })
-            .then((newNode) => {
-              // Add project slate to the preview node so it's recognized as a project
-              const projectPreviewNode = {
-                ...newNode,
-                slate: {
-                  v: 1,
-                  name: newNode.name,
-                  type: "project" as const,
-                  url: "",
-                  icon: "views://assets/file-icons/folder.svg",
-                  config: {},
-                }
-              };
+            electrobun.rpc?.request
+              .newPreviewNode({ candidateName: "new-project" })
+              .then((newNode) => {
+                // Add project slate to the preview node so it's recognized as a project
+                const projectPreviewNode = {
+                  ...newNode,
+                  slate: {
+                    v: 1,
+                    name: newNode.name,
+                    type: "project" as const,
+                    url: "",
+                    icon: "views://assets/file-icons/folder.svg",
+                    config: {},
+                  }
+                };
 
-              console.log("Creating project preview node with slate:", projectPreviewNode);
+                console.log("Creating project preview node with slate:", projectPreviewNode);
 
-              setState(
-                "settingsPane",
-                state.settingsPane.type === "add-node"
-                  ? {
+                setState(
+                  "settingsPane",
+                  state.settingsPane.type === "add-node"
+                    ? {
                       type: "",
                       data: {},
                     }
-                  : {
+                    : {
                       type: "add-node",
                       data: {
                         node: projectPreviewNode,
                         previewNode: projectPreviewNode,
                       },
                     }
-              );
-            });
-        }}
-      >
-        +
-      </div>
+                );
+              });
+          }}
+        >
+          +
+        </div>
       </Show>
     </div>
   );
@@ -347,7 +347,7 @@ const TemplateNodeItem = ({ template }: { template: typeof TEMPLATE_NODES[number
           url: "https://blackboard.sh",
           icon: "views://assets/file-icons/bookmark.svg",
           config: {
-            renderer: "system" as const,
+            renderer: "cef" as const,
           },
         };
 
@@ -683,7 +683,7 @@ export const FileTree = ({
 
   const [numResultsToShow, setNumResultsToShow] = createSignal(5);
   const [numResultsHidden, setNumResultsHidden] = createSignal(0);
-  
+
 
   const getSearchResults = () => {
     if (projectId && node.path) {
@@ -817,8 +817,8 @@ export const FileTree = ({
                       }}
                       isExpanded={() => false}
                       showChildPreview={() => false}
-                      newTerminal={() => {}}
-                      editNodeSettings={() => {}}
+                      newTerminal={() => { }}
+                      editNodeSettings={() => { }}
                       readonly={true}
                     />
                   </TreeLI>
@@ -1232,7 +1232,7 @@ const NodeName = ({
         return (
           tabNode &&
           getProjectForNode(tabNode)?.id ===
-            getProjectForNode(_nodeToRender)?.id &&
+          getProjectForNode(_nodeToRender)?.id &&
           tab.path === _nodeToRender.path
         );
       });
@@ -1337,144 +1337,144 @@ const NodeName = ({
       // const unwrappedNodeToRender = unwrap(_nodeToRender);
 
       const menuItems = [
-          ...openTabs.map((tab, index) => ({
-            label: `Focus Tab (${index + 1})`,
-            ...createContextMenuAction("focus_tab", {
-              tabId: tab.id,
-            }),
-          })),
+        ...openTabs.map((tab, index) => ({
+          label: `Focus Tab (${index + 1})`,
+          ...createContextMenuAction("focus_tab", {
+            tabId: tab.id,
+          }),
+        })),
 
 
-          { type: "separator", visible: Boolean(openTabs.length) },
+        { type: "separator", visible: Boolean(openTabs.length) },
 
-          {
-            label: "Open in New Tab",
-            hidden: !(_nodeToRender.type === "file" || Boolean(getSlateForNode(_nodeToRender))),
-            ...createContextMenuAction("open_new_tab", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
+        {
+          label: "Open in New Tab",
+          hidden: !(_nodeToRender.type === "file" || Boolean(getSlateForNode(_nodeToRender))),
+          ...createContextMenuAction("open_new_tab", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
 
-          {
-            label: "Open as Text",
-            hidden: !(_nodeToRender.type === "file" && Boolean(getSlateForNode(_nodeToRender))),
-            ...createContextMenuAction("open_as_text", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
+        {
+          label: "Open as Text",
+          hidden: !(_nodeToRender.type === "file" && Boolean(getSlateForNode(_nodeToRender))),
+          ...createContextMenuAction("open_as_text", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
 
-          {
-            label: "Copy Path to Clipboard",
-            ...createContextMenuAction("copy_path_to_clipboard", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
+        {
+          label: "Copy Path to Clipboard",
+          ...createContextMenuAction("copy_path_to_clipboard", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
 
-          // should show what settings "type" it is
-          {
-            label: "Show Node Settings",
-            hidden: readonly,
-            ...createContextMenuAction("show_node_settings", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
+        // should show what settings "type" it is
+        {
+          label: "Show Node Settings",
+          hidden: readonly,
+          ...createContextMenuAction("show_node_settings", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
 
-          { type: "separator", visible: Boolean(openTabs.length) },
-          // Add different node types for folders
-          {
-            label: "Add File",
-            hidden: readonly || node.type !== "dir",
-            ...createContextMenuAction("add_child_file", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
-          {
-            label: "Add Folder",
-            hidden: readonly || node.type !== "dir",
-            ...createContextMenuAction("add_child_folder", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
-          {
-            label: "Add Browser Profile",
-            hidden: readonly || node.type !== "dir",
-            ...createContextMenuAction("add_child_web", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
-          {
-            label: "Add AI Agent",
-            hidden: readonly || node.type !== "dir",
-            ...createContextMenuAction("add_child_agent", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
-          {
-            label: "New Terminal",
-            hidden: readonly || node.type !== "dir",
-            ...createContextMenuAction("new_terminal", {
-              nodePath: _nodeToRender.path,
-            }),
-          
-          },
-          { type: "separator", visible: Boolean(openTabs.length) },
-          {
-            label: "Rename",
-            hidden: readonly,
-            ...createContextMenuAction("show_node_settings", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
-          
-          // Special file creation for different node types
-          {
-            label: "Edit preload script",
-            hidden: readonly || getSlateForNode(_nodeToRender)?.type !== "web",
-            ...createContextMenuAction("create_preload_file", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
-          {
-            label: "Create .context.md",
-            hidden: readonly || getSlateForNode(_nodeToRender)?.type !== "agent",
-            ...createContextMenuAction("create_context_file", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
-          
-          { type: "separator", hidden: !openTabs.length },
-          {
-            label: "Init Git",
-            hidden: !(
-              node.type === "dir" &&
-              !(await nearestParentGitRepo(_nodeToRender.path)) &&
-              !(await firstNestedGitRepo(_nodeToRender.path))
-            ),
-            ...createContextMenuAction("init_git_in_folder", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
-          {
-            label: "Clone Repo",
-            hidden: !(node.type === "dir"),
-            ...createContextMenuAction("clone_repo_to_folder", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
-          {
-            type: "separator",
-          },
-          {
-            label: "Open in Finder",
-            hidden: readonly,
-            ...createContextMenuAction("open_node_in_finder", {
-              nodePath: _nodeToRender.path,
-            }),
-          },
-          {
-            type: "separator",
-          },
-        ];
+        { type: "separator", visible: Boolean(openTabs.length) },
+        // Add different node types for folders
+        {
+          label: "Add File",
+          hidden: readonly || node.type !== "dir",
+          ...createContextMenuAction("add_child_file", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
+        {
+          label: "Add Folder",
+          hidden: readonly || node.type !== "dir",
+          ...createContextMenuAction("add_child_folder", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
+        {
+          label: "Add Browser Profile",
+          hidden: readonly || node.type !== "dir",
+          ...createContextMenuAction("add_child_web", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
+        {
+          label: "Add AI Agent",
+          hidden: readonly || node.type !== "dir",
+          ...createContextMenuAction("add_child_agent", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
+        {
+          label: "New Terminal",
+          hidden: readonly || node.type !== "dir",
+          ...createContextMenuAction("new_terminal", {
+            nodePath: _nodeToRender.path,
+          }),
+
+        },
+        { type: "separator", visible: Boolean(openTabs.length) },
+        {
+          label: "Rename",
+          hidden: readonly,
+          ...createContextMenuAction("show_node_settings", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
+
+        // Special file creation for different node types
+        {
+          label: "Edit preload script",
+          hidden: readonly || getSlateForNode(_nodeToRender)?.type !== "web",
+          ...createContextMenuAction("create_preload_file", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
+        {
+          label: "Create .context.md",
+          hidden: readonly || getSlateForNode(_nodeToRender)?.type !== "agent",
+          ...createContextMenuAction("create_context_file", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
+
+        { type: "separator", hidden: !openTabs.length },
+        {
+          label: "Init Git",
+          hidden: !(
+            node.type === "dir" &&
+            !(await nearestParentGitRepo(_nodeToRender.path)) &&
+            !(await firstNestedGitRepo(_nodeToRender.path))
+          ),
+          ...createContextMenuAction("init_git_in_folder", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
+        {
+          label: "Clone Repo",
+          hidden: !(node.type === "dir"),
+          ...createContextMenuAction("clone_repo_to_folder", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
+        {
+          type: "separator",
+        },
+        {
+          label: "Open in Finder",
+          hidden: readonly,
+          ...createContextMenuAction("open_node_in_finder", {
+            nodePath: _nodeToRender.path,
+          }),
+        },
+        {
+          type: "separator",
+        },
+      ];
 
       // Fetch and add plugin context menu items
       try {
@@ -1503,22 +1503,22 @@ const NodeName = ({
         : null;
 
       menuItems.push(
-          {
-            label: "Remove Project from Colab",
-            hidden: readonly || !nodeIsProjectRoot,
-            ...createContextMenuAction("remove_project_from_colab", {
-              projectId: projectForRoot?.id,
-            }),
-          },
-          {
-            label: "Delete Node from Disk",
-            hidden: readonly || nodeIsProjectRoot,
-            ...createContextMenuAction("fully_delete_node_from_disk", {
-              nodePath: _nodeToRender?.path,
-              projectId: nodeIsProjectRoot ? projectForRoot?.id : undefined,
-            }),
-          },
-        );
+        {
+          label: "Remove Project from Colab",
+          hidden: readonly || !nodeIsProjectRoot,
+          ...createContextMenuAction("remove_project_from_colab", {
+            projectId: projectForRoot?.id,
+          }),
+        },
+        {
+          label: "Delete Node from Disk",
+          hidden: readonly || nodeIsProjectRoot,
+          ...createContextMenuAction("fully_delete_node_from_disk", {
+            nodePath: _nodeToRender?.path,
+            projectId: nodeIsProjectRoot ? projectForRoot?.id : undefined,
+          }),
+        },
+      );
 
       await electrobun.rpc?.request.showContextMenu({
         menuItems,
@@ -1805,20 +1805,20 @@ const NodeName = ({
             width: "8px",
             ...(true
               ? {
-                  rotate:
-                    (isExpandActive() && isHovered()) || isExpandHovered()
-                      ? isExpanded()
-                        ? "-5deg"
-                        : "5deg"
-                      : "0deg",
-                  translate:
-                    (isExpandActive() && isHovered()) || isExpandHovered()
-                      ? "2px"
-                      : "0px",
-                  "transform-origin": "center",
-                  transition:
-                    "translate 0.1s ease-in-out, rotate 0.2s ease-in-out",
-                }
+                rotate:
+                  (isExpandActive() && isHovered()) || isExpandHovered()
+                    ? isExpanded()
+                      ? "-5deg"
+                      : "5deg"
+                    : "0deg",
+                translate:
+                  (isExpandActive() && isHovered()) || isExpandHovered()
+                    ? "2px"
+                    : "0px",
+                "transform-origin": "center",
+                transition:
+                  "translate 0.1s ease-in-out, rotate 0.2s ease-in-out",
+              }
               : {}),
           }}
           onClick={onLeftActionClick}
@@ -1876,7 +1876,7 @@ const NodeName = ({
               opacity: fileDecoration()?.faded ? 0.5 : 1,
             }}
           >
-{(() => {
+            {(() => {
               const slate = getSlateForNode(nodeToRender());
               const node = nodeToRender();
 
@@ -1994,23 +1994,23 @@ export const getIconForNode = (
 ): string => {
   if (node.type === "dir") {
     const slate = getSlateForNode(node);
-    
+
     // For project slates, always use the regular folder icon
     if (slate?.type === "project") {
       return `views://assets/file-icons/folder.svg`;
     }
-    
+
     // For other slates with custom icons, use them
     if (slate?.icon) {
       return slate.icon;
     }
-    
+
     // Special case for .git folders
     const name = node.name;
     if (name === ".git") {
       return `views://assets/file-icons/git.png`;
     }
-    
+
     // Default folder icon
     return `views://assets/file-icons/folder.svg`;
   }
@@ -2128,8 +2128,8 @@ const FindAllResultProjectTree = ({ projectId, projectNode }) => {
         }}
         isExpanded={isExpanded}
         showChildPreview={() => false}
-        newTerminal={() => {}}
-        editNodeSettings={() => {}}
+        newTerminal={() => { }}
+        editNodeSettings={() => { }}
         readonly={true}
       />
 

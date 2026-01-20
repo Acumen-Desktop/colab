@@ -157,10 +157,10 @@ export const WebSlate = ({
   const renderer = () => {
     const slate = getSlateForNode(node);
     if (slate?.type === "web" && slate.config && "renderer" in slate.config) {
-      return slate.config.renderer || "system";
+      return slate.config.renderer || "cef";
     }
-    // Default to WebKit (system) for new browser profiles
-    return "system";
+    // Default to CEF (Chromium) for new browser profiles
+    return "cef";
   };
 
   // Helper to detect corrupted or invalid titles
@@ -382,7 +382,7 @@ console.log('Preload script loaded for:', window.location.href);
   //   // if (currentPane.tabIds.includes(tabId)) {
   //   // make webview tabs a little more responsive when showing/hiding while switching tabs
   //   console.log('toggle hidden id:', webviewRef, webviewRef?.webviewId)
-    
+
   //   // if (!webviewRef?.webviewId) {
   //   //   return;
   //   // }
@@ -769,7 +769,7 @@ console.log('Preload script loaded for:', window.location.href);
 
     loadAllPreloads();
   });
-  
+
   // Also watch for changes in the file cache for this specific preload file
   createEffect(() => {
     if (!preloadFilePath()) return;
@@ -886,8 +886,8 @@ console.log('Preload script loaded for:', window.location.href);
                   state.downloadNotification?.status === 'downloading'
                     ? `Downloading: ${state.downloadNotification?.filename} (${state.downloadNotification?.progress || 0}%)`
                     : state.downloadNotification?.status === 'completed'
-                    ? `Show ${state.downloadNotification?.filename} in Finder`
-                    : `Download failed: ${state.downloadNotification?.filename}`
+                      ? `Show ${state.downloadNotification?.filename} in Finder`
+                      : `Download failed: ${state.downloadNotification?.filename}`
                 }
               >
                 <Show when={state.downloadNotification?.status === 'downloading'}>
@@ -1131,208 +1131,208 @@ console.log('Preload script loaded for:', window.location.href);
           partition={partition}
           src={initialUrl}
           preload={preloadScript()}
-        ref={(el: any) => {
-          console.log('setting webviewRef', el, el.webviewId)
-          // console.log("electrobun-webview ref", el);
-          // YYY - el was type Electron.WebviewTag
-          webviewRef = el; // as Electron.WebviewTag;
-          
-          // Log what methods and properties are available
-          console.log("webviewRef created with ID:", webviewRef?.webviewId);
-          console.log("webviewRef object:", webviewRef);
-          
-          if (!webviewRef) {
-            console.error("webviewRef is null!");
-            return;
-          }
+          ref={(el: any) => {
+            console.log('setting webviewRef', el, el.webviewId)
+            // console.log("electrobun-webview ref", el);
+            // YYY - el was type Electron.WebviewTag
+            webviewRef = el; // as Electron.WebviewTag;
 
-          webviewRef.addMaskSelector(".webview-overlay");
+            // Log what methods and properties are available
+            console.log("webviewRef created with ID:", webviewRef?.webviewId);
+            console.log("webviewRef object:", webviewRef);
 
-          // Start load timeout for initial URL
-          startLoadTimeout(initialUrl);
-
-          webviewRef.on("dom-ready", () => {
-            console.log("dom-ready event fired for webview:", webviewRef.webviewId);
-            setIsReady(true);
-            // Update title when DOM is ready
-            const pageTitle = webviewRef?.getTitle?.();
-            console.log("getTitle result:", pageTitle);
-            if (pageTitle && typeof pageTitle === 'string' && !isCorruptedTitle(pageTitle)) {
-              setState(
-                produce((_state: AppState) => {
-                  const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
-                  _tab.title = pageTitle;
-                })
-              );
-            }
-          });
-
-          // Listen for page title updates
-          webviewRef.on("page-title-updated", (e: any) => {
-            console.log("page-title-updated event:", e.detail);
-            // Validate title before setting it
-            const newTitle = e.detail;
-            if (typeof newTitle === 'string' && newTitle.trim() && !isCorruptedTitle(newTitle)) {
-              setState(
-                produce((_state: AppState) => {
-                  const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
-                  _tab.title = newTitle;
-                })
-              );
-            }
-          });
-
-          // YYYY - DidNavigateEvent
-          // @ts-ignore
-          webviewRef.on("did-navigate", async (e: DidNavigateEvent) => {
-            console.log("did-navigate event:", e.detail);
-
-            // Ignore DevTools and other internal URLs - don't persist these
-            const url = e.detail;
-            if (!url ||
-                !url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file://') ||
-                url.toLowerCase().includes('devtools')) {
-              console.log("Ignoring non-web URL:", url);
+            if (!webviewRef) {
+              console.error("webviewRef is null!");
               return;
             }
 
-            // Update URL immediately
-            setState(
-              produce((_state: AppState) => {
-                const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
-                _tab.url = url;
+            webviewRef.addMaskSelector(".webview-overlay");
 
-                // Only set a temporary hostname-based title if:
-                // 1. There's no existing title, OR
-                // 2. The existing title is corrupted
-                const currentTitle = _tab.title;
-                const shouldSetTempTitle = !currentTitle || isCorruptedTitle(currentTitle);
+            // Start load timeout for initial URL
+            startLoadTimeout(initialUrl);
 
-                if (shouldSetTempTitle) {
-                  // Extract hostname as a temporary title until we get the real page title
-                  try {
-                    const url = new URL(e.detail);
-                    _tab.title = url.hostname;
-                  } catch (err) {
-                    // Invalid URL, don't set a title - wait for page-title-updated event
-                    console.warn("Invalid URL in did-navigate:", e.detail);
+            webviewRef.on("dom-ready", () => {
+              console.log("dom-ready event fired for webview:", webviewRef.webviewId);
+              setIsReady(true);
+              // Update title when DOM is ready
+              const pageTitle = webviewRef?.getTitle?.();
+              console.log("getTitle result:", pageTitle);
+              if (pageTitle && typeof pageTitle === 'string' && !isCorruptedTitle(pageTitle)) {
+                setState(
+                  produce((_state: AppState) => {
+                    const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
+                    _tab.title = pageTitle;
+                  })
+                );
+              }
+            });
+
+            // Listen for page title updates
+            webviewRef.on("page-title-updated", (e: any) => {
+              console.log("page-title-updated event:", e.detail);
+              // Validate title before setting it
+              const newTitle = e.detail;
+              if (typeof newTitle === 'string' && newTitle.trim() && !isCorruptedTitle(newTitle)) {
+                setState(
+                  produce((_state: AppState) => {
+                    const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
+                    _tab.title = newTitle;
+                  })
+                );
+              }
+            });
+
+            // YYYY - DidNavigateEvent
+            // @ts-ignore
+            webviewRef.on("did-navigate", async (e: DidNavigateEvent) => {
+              console.log("did-navigate event:", e.detail);
+
+              // Ignore DevTools and other internal URLs - don't persist these
+              const url = e.detail;
+              if (!url ||
+                !url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file://') ||
+                url.toLowerCase().includes('devtools')) {
+                console.log("Ignoring non-web URL:", url);
+                return;
+              }
+
+              // Update URL immediately
+              setState(
+                produce((_state: AppState) => {
+                  const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
+                  _tab.url = url;
+
+                  // Only set a temporary hostname-based title if:
+                  // 1. There's no existing title, OR
+                  // 2. The existing title is corrupted
+                  const currentTitle = _tab.title;
+                  const shouldSetTempTitle = !currentTitle || isCorruptedTitle(currentTitle);
+
+                  if (shouldSetTempTitle) {
+                    // Extract hostname as a temporary title until we get the real page title
+                    try {
+                      const url = new URL(e.detail);
+                      _tab.title = url.hostname;
+                    } catch (err) {
+                      // Invalid URL, don't set a title - wait for page-title-updated event
+                      console.warn("Invalid URL in did-navigate:", e.detail);
+                    }
                   }
-                }
-              })
-            );
+                })
+              );
 
-            // Fetch favicon for the new URL
-            electrobun.rpc?.request
-              .getFaviconForUrl({ url: e.detail })
-              .then((favicon) => {
-                if (favicon) {
-                  // Update the tab's icon in the slate config if this is a real browser profile node
-                  if (isRealNode() && node) {
-                    const slateConfigPath = join(node.path, ".colab.json");
-                    electrobun.rpc?.request.readFile({ path: slateConfigPath })
-                      .then((content) => {
-                        if (content) {
-                          try {
-                            const slateConfig = JSON.parse(content);
-                            slateConfig.icon = favicon;
-                            electrobun.rpc?.request.writeFile({
-                              path: slateConfigPath,
-                              value: JSON.stringify(slateConfig, null, 2),
-                            });
-                          } catch (error) {
-                            console.error("Error updating slate config favicon:", error);
+              // Fetch favicon for the new URL
+              electrobun.rpc?.request
+                .getFaviconForUrl({ url: e.detail })
+                .then((favicon) => {
+                  if (favicon) {
+                    // Update the tab's icon in the slate config if this is a real browser profile node
+                    if (isRealNode() && node) {
+                      const slateConfigPath = join(node.path, ".colab.json");
+                      electrobun.rpc?.request.readFile({ path: slateConfigPath })
+                        .then((content) => {
+                          if (content) {
+                            try {
+                              const slateConfig = JSON.parse(content);
+                              slateConfig.icon = favicon;
+                              electrobun.rpc?.request.writeFile({
+                                path: slateConfigPath,
+                                value: JSON.stringify(slateConfig, null, 2),
+                              });
+                            } catch (error) {
+                              console.error("Error updating slate config favicon:", error);
+                            }
                           }
-                        }
-                      })
-                      .catch((error) => {
-                        console.error("Error reading slate config for favicon update:", error);
-                      });
+                        })
+                        .catch((error) => {
+                          console.error("Error reading slate config for favicon update:", error);
+                        });
+                    }
                   }
-                }
-              })
-              .catch((error) => {
-                console.error("Error fetching favicon on navigation:", error);
-              });
+                })
+                .catch((error) => {
+                  console.error("Error fetching favicon on navigation:", error);
+                });
 
-            updateSyncedState();
-          });
-          webviewRef.on("did-navigate-in-page", (e: DidNavigateInPageEvent) => {
-            if (!e.isMainFrame) {
-              return;
-            }
+              updateSyncedState();
+            });
+            webviewRef.on("did-navigate-in-page", (e: DidNavigateInPageEvent) => {
+              if (!e.isMainFrame) {
+                return;
+              }
 
-            // Ignore DevTools and other internal URLs
-            const url = e.detail;
-            if (!url ||
+              // Ignore DevTools and other internal URLs
+              const url = e.detail;
+              if (!url ||
                 !url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file://') ||
                 url.toLowerCase().includes('devtools')) {
-              return;
-            }
+                return;
+              }
 
-            setState(
-              produce((_state: AppState) => {
-                const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
-                _tab.url = url;
-                // Get the title after in-page navigation
-                const pageTitle = webviewRef?.getTitle();
-                if (pageTitle && typeof pageTitle === 'string' && !isCorruptedTitle(pageTitle)) {
-                  _tab.title = pageTitle;
-                }
-              })
-            );
+              setState(
+                produce((_state: AppState) => {
+                  const _tab = getWindow(_state)?.tabs[tabId] as WebTabType;
+                  _tab.url = url;
+                  // Get the title after in-page navigation
+                  const pageTitle = webviewRef?.getTitle();
+                  if (pageTitle && typeof pageTitle === 'string' && !isCorruptedTitle(pageTitle)) {
+                    _tab.title = pageTitle;
+                  }
+                })
+              );
 
-            updateSyncedState();
-          });
+              updateSyncedState();
+            });
 
-          webviewRef.on("new-window-open", (e: any) => {
-            console.log('new window open fired in webview')
-            try {
-              // const data = JSON.parse(e.detail)
-              const targetUrl = e.detail.url;
-              openNewTabForNode(node.path, false, {
-                url: targetUrl,
-                focusNewTab: false,
-                targetPaneId: tab()?.paneId,
-              });
-            } catch (e) {
-              console.log(e)
-            }
-          });
+            webviewRef.on("new-window-open", (e: any) => {
+              console.log('new window open fired in webview')
+              try {
+                // const data = JSON.parse(e.detail)
+                const targetUrl = e.detail.url;
+                openNewTabForNode(node.path, false, {
+                  url: targetUrl,
+                  focusNewTab: false,
+                  targetPaneId: tab()?.paneId,
+                });
+              } catch (e) {
+                console.log(e)
+              }
+            });
 
-          // Listen for messages from webview preload scripts
-          webviewRef.on("host-message", (e: any) => {
-            const msg = e.detail;
+            // Listen for messages from webview preload scripts
+            webviewRef.on("host-message", (e: any) => {
+              const msg = e.detail;
 
-            // Page loaded successfully - preload script executed
-            if (msg?.type === 'colab:page-loaded') {
-              console.log("[WebSlate] Page loaded message received from preload");
-              clearLoadTimeout();
-            }
+              // Page loaded successfully - preload script executed
+              if (msg?.type === 'colab:page-loaded') {
+                console.log("[WebSlate] Page loaded message received from preload");
+                clearLoadTimeout();
+              }
 
-            // Keyboard shortcuts forwarded from webview
-            // This allows Ctrl+Tab/Ctrl+Shift+Tab to work even when the webview OOPIF has focus
-            if (msg?.type === 'colab:keydown') {
-              // Dispatch a synthetic keyboard event to the document so it bubbles up
-              // to the global keydown handler in index.tsx
-              const syntheticEvent = new KeyboardEvent('keydown', {
-                key: msg.key,
-                ctrlKey: msg.ctrlKey,
-                shiftKey: msg.shiftKey,
-                altKey: msg.altKey,
-                metaKey: msg.metaKey,
-                bubbles: true,
-                cancelable: true,
-              });
-              document.dispatchEvent(syntheticEvent);
-            }
-          });
+              // Keyboard shortcuts forwarded from webview
+              // This allows Ctrl+Tab/Ctrl+Shift+Tab to work even when the webview OOPIF has focus
+              if (msg?.type === 'colab:keydown') {
+                // Dispatch a synthetic keyboard event to the document so it bubbles up
+                // to the global keydown handler in index.tsx
+                const syntheticEvent = new KeyboardEvent('keydown', {
+                  key: msg.key,
+                  ctrlKey: msg.ctrlKey,
+                  shiftKey: msg.shiftKey,
+                  altKey: msg.altKey,
+                  metaKey: msg.metaKey,
+                  bubbles: true,
+                  cancelable: true,
+                });
+                document.dispatchEvent(syntheticEvent);
+              }
+            });
 
-          // XXX - webview focus
-          // webviewRef.addEventListener("focus", () => {
-          //   focusTabWithId(tabId);
-          // });
-        }}
-      ></electrobun-webview>
+            // XXX - webview focus
+            // webviewRef.addEventListener("focus", () => {
+            //   focusTabWithId(tabId);
+            // });
+          }}
+        ></electrobun-webview>
       </Show>
     </div>
   );

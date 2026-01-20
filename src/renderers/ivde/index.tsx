@@ -1288,17 +1288,17 @@ const getContainerCSS = (container: LayoutContainerType, index: number) => {
 
 	return container.direction === "row"
 		? {
-				display: "flex",
-				"flex-grow": 1,
-				width: value,
-				height: "100%",
-		  }
+			display: "flex",
+			"flex-grow": 1,
+			width: value,
+			height: "100%",
+		}
 		: {
-				display: "flex",
-				"flex-grow": 1,
-				width: "100%",
-				height: value,
-		  };
+			display: "flex",
+			"flex-grow": 1,
+			width: "100%",
+			height: value,
+		};
 };
 
 const PaneContainerComponent = ({
@@ -1673,8 +1673,8 @@ const Pane = ({
 				? "horizontal-join-right"
 				: "horizontal-join-left"
 			: paneSiblingIndex === 0
-			  ? "vertical-join-down"
-			  : "vertical-join-up";
+				? "vertical-join-down"
+				: "vertical-join-up";
 
 	// Removed isDroppingTabAtEnd - was only used by the new tab button
 
@@ -1943,7 +1943,7 @@ const TabContent = ({ tabId }: { tabId: string }) => {
 							background: "#fff",
 						}}
 						src={tab()?.path}
-						// preload=""
+					// preload=""
 					/>
 				</Match>
 
@@ -2271,11 +2271,11 @@ const PaneTab = ({
 	const isDraggingStyles = () => {
 		return hideWileDragging()
 			? {
-					// opacity: "0.3",
-					// display: "none",
-					// width: "10px",
-					// overflow: "hidden",
-			  }
+				// opacity: "0.3",
+				// display: "none",
+				// width: "10px",
+				// overflow: "hidden",
+			}
 			: {};
 	};
 
@@ -2351,10 +2351,10 @@ const PaneTab = ({
 					background: isDroppingTabLeftOfThisTab()
 						? "#105460"
 						: isCurrentTab()
-						  ? "#1e1e1e"
-						  : isHovered()
-							  ? "#303030"
-							  : "#292929",
+							? "#1e1e1e"
+							: isHovered()
+								? "#303030"
+								: "#292929",
 					color: isCurrentTab() ? "#e2e2e2" : "#bbb",
 					opacity: isCurrentTab() ? 1 : 0.75,
 					padding: "6px 20px 6px 14px",
@@ -2415,9 +2415,8 @@ const PaneTab = ({
 					<div
 						onMouseEnter={() => setIsHoveredOnX(true)}
 						onMouseLeave={() => setIsHoveredOnX(false)}
-						style={`position: absolute; top: 7px; right: 3px; background: ${
-							isHoveredOnX() ? "#555" : "transparent"
-						};
+						style={`position: absolute; top: 7px; right: 3px; background: ${isHoveredOnX() ? "#555" : "transparent"
+							};
           font-size: 11px;
           width: 14px;
           height: 14px;
@@ -3161,7 +3160,7 @@ const NodeSettings = () => {
 					type: "web",
 					url: "https://duckduckgo.com",
 					config: {
-						renderer: "system" as const,
+						renderer: "cef" as const,
 					},
 				},
 			});
@@ -4020,7 +4019,7 @@ const NodeSettings = () => {
 										</SettingsPaneFormSection>
 									</Show>
 
-									</div>
+								</div>
 							</div>
 						</div>
 					</div>
